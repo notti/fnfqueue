@@ -8,19 +8,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-// struct with
-//	fd
-//	queue
-//	sequence
-//	processing_thread
+#include <unistd.h> //for testing
+
+struct nfq_queue {
+	int fd;
+	uint16_t id;
+	__u32 seq;
+// synchronous version?
+	pthread_t processing;
 //	error_queue
 //	msg_queue
+};
+
 
 #define BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
 		   NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
 		   NLMSG_ALIGN(sizeof(struct nlattr)))
 
-ssize_t send_msg(int fd, uint16_t queue, __u32 seq, __u16 type, void *data, size_t len) {
+ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 	char buf[BASE_SIZE];
 	ssize_t ret;
 	void *buf_ass = buf;
@@ -29,14 +34,14 @@ ssize_t send_msg(int fd, uint16_t queue, __u32 seq, __u16 type, void *data, size
 		.nlmsg_len = BASE_SIZE + NLMSG_ALIGN(len),
 		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_CONFIG,
 		.nlmsg_flags = NLM_F_REQUEST,// | NLM_F_ACK,
-		.nlmsg_seq = seq,
+		.nlmsg_seq = queue->seq++,
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nlmsghdr));
 	struct nfgenmsg *nfg = buf_ass;
 	*nfg = (struct nfgenmsg){
 		.nfgen_family = AF_UNSPEC,
 		.version = NFNETLINK_V0,
-		.res_id = htons(queue)
+		.res_id = htons(queue->id)
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nfgenmsg));
 	struct nlattr *attr = buf_ass;
@@ -53,7 +58,7 @@ ssize_t send_msg(int fd, uint16_t queue, __u32 seq, __u16 type, void *data, size
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), iov, 3, NULL, 0, 0 };
 
-	if ((ret = sendmsg(fd, &msg, 0)) == -1) {
+	if ((ret = sendmsg(queue->fd, &msg, 0)) == -1) {
 		return ret;
 	}
 
@@ -64,8 +69,7 @@ ssize_t send_msg(int fd, uint16_t queue, __u32 seq, __u16 type, void *data, size
 
 void *process(void *arg) {
 	int len;
-	int i = 3;
-	int fd = *(int*)arg;
+	struct nfq_queue *queue = arg;
 	char buf[4096];
 	struct iovec iov = { buf, sizeof(buf) };
 	struct sockaddr_nl sa = { AF_NETLINK };
@@ -77,7 +81,7 @@ void *process(void *arg) {
 
 	for(;;) {
 
-		len = recvmsg(fd, &msg, 0);
+		len = recvmsg(queue->fd, &msg, 0);
 		nh = (struct nlmsghdr *) buf;
 		if (nh->nlmsg_type == NLMSG_ERROR) {
 			err = (struct nlmsgerr *) NLMSG_DATA(nh);
@@ -102,56 +106,61 @@ void *process(void *arg) {
 			}
 		}
 		printf("\n");
-		i--;
-		if (i < 0)
-			return NULL;
 	}
 }
 
-int main(int argc, char *argv[]) {
+void init_queue(struct nfq_queue *queue, uint16_t id) {
+	struct sockaddr_nl sa = { AF_NETLINK };
 
-	int fd;
-	int sequence_number = 0;
-	int queue = 1;
-
-	// v setup
-	{
-		struct sockaddr_nl sa = { AF_NETLINK };
-		fd = socket(AF_NETLINK,	SOCK_RAW, NETLINK_NETFILTER);
-		if (fd == -1) {
-			perror("socket failed");
-			exit(-1);
-		}
-		if (bind(fd, (struct sockaddr *) &sa, sizeof(sa))) {
-			perror("bind failed");
-			exit(-1);
-		}
+	if ((queue->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)) == -1) {
+		perror("socket failed");
+		exit(-1);
 	}
-	// ^ setup
+	if (bind(queue->fd, (struct sockaddr *) &sa, sizeof(sa))) {
+		perror("bind failed");
+		exit(-1);
+	}
 
-	/* must take care of message sequence numbers in order to
-		reliably track acknowledgements.*/
-
-	printf("bind\n");
+	queue->seq = 0;
+	queue->id = id;
 
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_BIND
 	};
-	send_msg(fd, queue, ++sequence_number, NFQA_CFG_CMD, &cmd, sizeof(cmd));
+	send_msg(queue, NFQA_CFG_CMD, &cmd, sizeof(cmd)); //check ret
 
-	printf("mode\n");
+	if (pthread_create(&(queue->processing), NULL, process, queue)) {
+		perror("pthread failed");
+		exit(-1);
+	}
+}
+
+
+void stop_queue(struct nfq_queue *queue) {
+	pthread_cancel(queue->processing);
+	pthread_join(queue->processing, NULL);
+	close(queue->fd);
+}
+
+
+int main(int argc, char *argv[]) {
+
+	struct nfq_queue queue;
+
+	init_queue(&queue, 1);
+
+	/* must take care of message sequence numbers in order to
+		reliably track acknowledgements.*/
+
 	struct nfqnl_msg_config_params params = {
 		htonl(1000),
 		NFQNL_COPY_PACKET
 	};
-	send_msg(fd, queue, ++sequence_number, NFQA_CFG_PARAMS, &params, sizeof(params));
-	
-	pthread_t processing;
-	if (pthread_create(&processing, NULL, process, &fd)) {
-		perror("pthread failed");
-		exit(-1);
-	}
-	pthread_join(processing, NULL);
+	send_msg(&queue, NFQA_CFG_PARAMS, &params, sizeof(params));
+
+	sleep(10);
+
+	stop_queue(&queue);
 
 	return 0;
 }
