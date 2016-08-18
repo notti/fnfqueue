@@ -1,29 +1,9 @@
-#include <pthread.h>
-#include <asm/types.h>
+#include "nfq_main.h"
 #include <sys/socket.h>
-#include <arpa/inet.h>
-#include <linux/netlink.h>
-#include <linux/netfilter/nfnetlink_queue.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-#include <unistd.h> //for testing
-
-struct nfq_queue {
-	int fd;
-	uint16_t id;
-	__u32 seq;
-// synchronous version?
-	pthread_t processing;
-//	error_queue
-//	msg_queue
-};
-
-
-#define BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
-		   NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
-		   NLMSG_ALIGN(sizeof(struct nlattr)))
+#include <stdlib.h> //remove
+#include <string.h> //remove
+#include <stdio.h> //remove
 
 ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 	char buf[BASE_SIZE];
@@ -141,28 +121,4 @@ void stop_queue(struct nfq_queue *queue) {
 	pthread_join(queue->processing, NULL);
 	close(queue->fd);
 }
-
-
-int main(int argc, char *argv[]) {
-
-	struct nfq_queue queue;
-
-	init_queue(&queue, 1);
-
-	/* must take care of message sequence numbers in order to
-		reliably track acknowledgements.*/
-
-	struct nfqnl_msg_config_params params = {
-		htonl(1000),
-		NFQNL_COPY_PACKET
-	};
-	send_msg(&queue, NFQA_CFG_PARAMS, &params, sizeof(params));
-
-	sleep(10);
-
-	stop_queue(&queue);
-
-	return 0;
-}
-
 
