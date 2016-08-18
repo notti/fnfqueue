@@ -51,31 +51,55 @@ void *process(void *arg) {
 	int len;
 	int ignore;
 	struct nfq_queue *queue = arg;
-	char buf[4096];
-	struct iovec iov = { buf, sizeof(buf) };
+	struct iovec iov;
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 	struct nlmsghdr *nh;
 	struct nlmsgerr *err;
 	struct nlattr *attr;
 	struct nfgenmsg *nfg;
+	struct nfq_packet *packet;
 
 	for(;;) {
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
+		pthread_mutex_lock(&queue->empty.mutex);
+		for(;;) {
+			if (queue->empty.head != NULL) {
+				packet = queue->empty.head;
+				queue->empty.head = packet->next;
+				if (queue->empty.head == NULL) {
+					queue->empty.last = NULL;
+				}
+				break;
+			}
+			pthread_cond_wait(&queue->empty.cond, &queue->empty.mutex);
+		}
+		pthread_mutex_unlock(&queue->empty.mutex);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
+		
+		iov.iov_base = packet->buffer;
+		iov.iov_len = packet->len;
 
 		len = recvmsg(queue->fd, &msg, 0);
-		nh = (struct nlmsghdr *) buf;
-		if (nh->nlmsg_type == NLMSG_ERROR) {
+
+		nh = (struct nlmsghdr *) packet->buffer;
+
+/*		//FIXME
+ 		if (nh->nlmsg_type == NLMSG_ERROR) {
 			err = (struct nlmsgerr *) NLMSG_DATA(nh);
 			printf("Error %d %s!\n", err->error,
 					strerror(-1*err->error));
 			continue;
 		}
+		//FIXME
 		if (nh->nlmsg_type != ((NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_PACKET)) {
 			printf("Unknown type %d!\n", err->error);
 			continue;
-		}
+		} */
+
 		nfg = (struct nfgenmsg *) NLMSG_DATA(nh);
 		printf("queue: %d ", ntohs(nfg->res_id));
+
 		for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLMSG_ALIGN(sizeof(struct nfgenmsg)));
 				(attr < (struct nlattr*)(nh + nh->nlmsg_len)) && (attr->nla_len >= sizeof(struct nlattr));
 				attr = (struct nlattr *)((void *)attr + NLMSG_ALIGN(attr->nla_len))) {
@@ -86,12 +110,21 @@ void *process(void *arg) {
 					printf(" %02X", *buffer & 0xFF);
 			}
 		}
+
 		printf("\n");
+
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
-		pthread_mutex_lock(&queue->msg_mutex);
-		//add msg(s) to queue
-		pthread_cond_broadcast(&queue->msg_cond);
-		pthread_mutex_unlock(&queue->msg_mutex);
+		pthread_mutex_lock(&queue->msg.mutex);
+		packet->next = NULL;
+		if (queue->msg.head == NULL) {
+			queue->msg.head = packet;
+		}
+		if (queue->msg.last != NULL) {
+			queue->msg.last->next = packet;
+		}
+		queue->msg.last = packet;
+		pthread_cond_broadcast(&queue->msg.cond);
+		pthread_mutex_unlock(&queue->msg.mutex);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 	}
 }
@@ -110,8 +143,20 @@ void init_queue(struct nfq_queue *queue, uint16_t id) {
 
 	queue->seq = 0;
 	queue->id = id;
-	pthread_mutex_init(&queue->msg_mutex,  NULL);
-	pthread_cond_init(&queue->msg_cond, NULL);
+
+	queue->empty.head = NULL;
+	queue->empty.last = NULL;
+	queue->msg.head = NULL;
+	queue->msg.last = NULL;
+	queue->error.head = NULL;
+	queue->error.last = NULL;
+
+	pthread_mutex_init(&queue->empty.mutex,  NULL);
+	pthread_cond_init(&queue->empty.cond, NULL);
+	pthread_mutex_init(&queue->msg.mutex,  NULL);
+	pthread_cond_init(&queue->msg.cond, NULL);
+	pthread_mutex_init(&queue->error.mutex,  NULL);
+	pthread_cond_init(&queue->error.cond, NULL);
 
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_BIND
@@ -128,17 +173,50 @@ void init_queue(struct nfq_queue *queue, uint16_t id) {
 void stop_queue(struct nfq_queue *queue) {
 	pthread_cancel(queue->processing);
 	pthread_join(queue->processing, NULL);
+
 	close(queue->fd);
-	pthread_mutex_destroy(&queue->msg_mutex);
-	pthread_cond_destroy(&queue->msg_cond);
+
+	pthread_mutex_destroy(&queue->empty.mutex);
+	pthread_cond_destroy(&queue->empty.cond);
+	pthread_mutex_destroy(&queue->msg.mutex);
+	pthread_cond_destroy(&queue->msg.cond);
+	pthread_mutex_destroy(&queue->error.mutex);
+	pthread_cond_destroy(&queue->error.cond);
 }
 
-void get_packet(struct nfq_queue *queue) {
-	pthread_mutex_lock(&queue->msg_mutex);
-	//pop msg if available
-	//else
-	pthread_cond_wait(&queue->msg_cond, &queue->msg_mutex);
-	//try again
-	pthread_mutex_unlock(&queue->msg_mutex);
+void get_packet(struct nfq_queue *queue, struct nfq_packet **packet) {
+	pthread_mutex_lock(&queue->msg.mutex);
+	for(;;) {
+		if (queue->msg.head != NULL) {
+			*packet = queue->msg.head;
+			queue->msg.head = (*packet)->next;
+			if (queue->msg.head == NULL) {
+				queue->msg.last = NULL;
+			}
+			break;
+		}
+		pthread_cond_wait(&queue->msg.cond, &queue->msg.mutex);
+	}
+	pthread_mutex_unlock(&queue->msg.mutex);
 }
 
+void add_empty(struct nfq_queue *queue, struct nfq_packet *packet) {
+	for(int i=0; i<=NFQA_MAX; i++) {
+		packet->attr[i].buffer = NULL;
+		packet->attr[i].len = 0;
+	}
+	packet->error = 0;
+	packet->seq = 0;
+	packet->next = NULL;
+	
+	pthread_mutex_lock(&queue->empty.mutex);
+	if (queue->empty.head == NULL) {
+		queue->empty.head = packet;
+	}
+	if (queue->empty.last != NULL) {
+		queue->empty.last->next = packet;
+	}
+	queue->empty.last = packet;
+	pthread_cond_broadcast(&queue->empty.cond);
+	pthread_mutex_unlock(&queue->empty.mutex);
+}
