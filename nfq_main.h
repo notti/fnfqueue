@@ -17,6 +17,8 @@ struct nfq_queue {
 	pthread_t processing;
 //	error_queue
 //	msg_queue
+	pthread_mutex_t msg_mutex;
+	pthread_cond_t msg_cond;
 };
 
 
@@ -27,6 +29,7 @@ struct nfq_queue {
 ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len);
 void init_queue(struct nfq_queue *queue, uint16_t id);
 void stop_queue(struct nfq_queue *queue);
+void get_packet(struct nfq_queue *queue);
 
 
 #endif

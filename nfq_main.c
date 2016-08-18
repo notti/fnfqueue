@@ -49,6 +49,7 @@ ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 
 void *process(void *arg) {
 	int len;
+	int ignore;
 	struct nfq_queue *queue = arg;
 	char buf[4096];
 	struct iovec iov = { buf, sizeof(buf) };
@@ -86,6 +87,12 @@ void *process(void *arg) {
 			}
 		}
 		printf("\n");
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
+		pthread_mutex_lock(&queue->msg_mutex);
+		//add msg(s) to queue
+		pthread_cond_broadcast(&queue->msg_cond);
+		pthread_mutex_unlock(&queue->msg_mutex);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 	}
 }
 
@@ -103,13 +110,15 @@ void init_queue(struct nfq_queue *queue, uint16_t id) {
 
 	queue->seq = 0;
 	queue->id = id;
+	pthread_mutex_init(&queue->msg_mutex,  NULL);
+	pthread_cond_init(&queue->msg_cond, NULL);
 
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_BIND
 	};
 	send_msg(queue, NFQA_CFG_CMD, &cmd, sizeof(cmd)); //check ret
 
-	if (pthread_create(&(queue->processing), NULL, process, queue)) {
+	if (pthread_create(&queue->processing, NULL, process, queue)) {
 		perror("pthread failed");
 		exit(-1);
 	}
@@ -120,5 +129,16 @@ void stop_queue(struct nfq_queue *queue) {
 	pthread_cancel(queue->processing);
 	pthread_join(queue->processing, NULL);
 	close(queue->fd);
+	pthread_mutex_destroy(&queue->msg_mutex);
+	pthread_cond_destroy(&queue->msg_cond);
+}
+
+void get_packet(struct nfq_queue *queue) {
+	pthread_mutex_lock(&queue->msg_mutex);
+	//pop msg if available
+	//else
+	pthread_cond_wait(&queue->msg_cond, &queue->msg_mutex);
+	//try again
+	pthread_mutex_unlock(&queue->msg_mutex);
 }
 

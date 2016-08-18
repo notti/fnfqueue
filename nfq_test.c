@@ -18,7 +18,11 @@ int main(int argc, char *argv[]) {
 	};
 	send_msg(&queue, NFQA_CFG_PARAMS, &params, sizeof(params));
 
-	sleep(10);
+	for(int i=0; i<3; i++) {
+		get_packet(&queue);
+		printf("yay\n");
+	}
+
 
 	stop_queue(&queue);
 
