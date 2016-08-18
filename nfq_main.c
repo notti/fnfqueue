@@ -98,20 +98,15 @@ void *process(void *arg) {
 		} */
 
 		nfg = (struct nfgenmsg *) NLMSG_DATA(nh);
-		printf("queue: %d ", ntohs(nfg->res_id));
 
-		for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLMSG_ALIGN(sizeof(struct nfgenmsg)));
+		for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLA_ALIGN(sizeof(struct nfgenmsg)));
 				(attr < (struct nlattr*)(nh + nh->nlmsg_len)) && (attr->nla_len >= sizeof(struct nlattr));
-				attr = (struct nlattr *)((void *)attr + NLMSG_ALIGN(attr->nla_len))) {
-			if (attr->nla_type == NFQA_PAYLOAD) {
-				for (char *buffer=(char *)((void*)attr + NLMSG_ALIGN(sizeof(struct nlattr)));
-						buffer < (char *)((void*)attr + attr->nla_len);
-						buffer++)
-					printf(" %02X", *buffer & 0xFF);
-			}
+				attr = (struct nlattr *)((void *)attr + NLA_ALIGN(attr->nla_len))) {
+			packet->attr[attr->nla_type].buffer = (void*)attr +
+				NLA_HDRLEN;
+			packet->attr[attr->nla_type].len = attr->nla_len -
+				NLA_HDRLEN;
 		}
-
-		printf("\n");
 
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
 		pthread_mutex_lock(&queue->msg.mutex);

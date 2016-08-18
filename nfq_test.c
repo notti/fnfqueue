@@ -28,7 +28,9 @@ int main(int argc, char *argv[]) {
 
 	for(int i=0; i<3; i++) {
 		get_packet(&queue, &packet);
-		printf("yay\n");
+		for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
+			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
+		printf("\n");
 		add_empty(&queue, packet);
 	}
 
