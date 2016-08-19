@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(int argc, char *argv[]) {
 
@@ -18,15 +19,13 @@ int main(int argc, char *argv[]) {
 	}
 	add_empty(&conn, packets, 3);
 
-	/* must take care of message sequence numbers in order to
-		reliably track acknowledgements.*/
-
-	bind_queue(&conn, id);
-	set_mode(&conn, id, 1000, NFQNL_COPY_PACKET);
+	printf("bind: %s\n", strerror(bind_queue(&conn, id)));
+	printf("set_mode: %s\n", strerror(set_mode(&conn, id, 1000, NFQNL_COPY_PACKET)));
 
 
 	for(int i=0; i<3; i++) {
-		printf("get_packet: %d\n", get_packet(&conn, &packet, 1));
+		printf("get_packet: %d ", get_packet(&conn, &packet, 1));
+		printf("seq: %d\n", packet->seq);
 		for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
 			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
 		printf("\n");

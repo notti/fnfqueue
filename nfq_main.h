@@ -41,12 +41,13 @@ struct nfq_connection {
 	struct nfq_list error;
 };
 
-#define BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
-		   NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
-		   NLMSG_ALIGN(sizeof(struct nlattr)))
+#define NFQ_BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
+		       NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
+		       NLMSG_ALIGN(sizeof(struct nlattr)))
 
 int send_msg(struct nfq_connection *conn, uint16_t queue_id, uint16_t type,
 		void *data, size_t len);
+void parse_packet(struct msghdr *msg, struct nfq_packet *packet);
 void init_connection(struct nfq_connection *conn, int flags);
 void close_connection(struct nfq_connection *conn);
 
