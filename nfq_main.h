@@ -18,7 +18,7 @@ struct nfq_packet {
 	void *buffer;
 	size_t len;
 	int error;
-	__u32 seq;
+	uint32_t  seq;
 	uint16_t queue_id;
 	struct nfq_attr attr[NFQA_MAX + 1];
 	struct nfq_packet *next;
@@ -33,7 +33,7 @@ struct nfq_list {
 
 struct nfq_connection {
 	int fd;
-	__u32 seq;
+	uint32_t seq;
 // synchronous version?
 	pthread_t processing;
 	struct nfq_list empty;
@@ -45,10 +45,14 @@ struct nfq_connection {
 		   NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
 		   NLMSG_ALIGN(sizeof(struct nlattr)))
 
-ssize_t send_msg(struct nfq_connection *conn, uint16_t queue_id, __u16 type,
+int send_msg(struct nfq_connection *conn, uint16_t queue_id, uint16_t type,
 		void *data, size_t len);
 void init_connection(struct nfq_connection *conn, int flags);
 void close_connection(struct nfq_connection *conn);
+
+int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
+int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
+		uint8_t mode);
 
 void add_empty(struct nfq_connection *conn, struct nfq_packet *packet);
 void get_packet(struct nfq_connection *conn, struct nfq_packet **packet);

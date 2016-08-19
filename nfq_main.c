@@ -5,7 +5,7 @@
 #include <string.h> //remove
 #include <stdio.h> //remove
 
-ssize_t send_msg(struct nfq_connection *conn, uint16_t id, __u16 type,
+int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		void *data, size_t len) {
 	char buf[BASE_SIZE];
 	ssize_t ret;
@@ -46,6 +46,22 @@ ssize_t send_msg(struct nfq_connection *conn, uint16_t id, __u16 type,
 	// wait for result
 	
 	return 0;
+}
+
+int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
+	struct nfqnl_msg_config_cmd cmd = {
+		NFQNL_CFG_CMD_BIND
+	};
+	return send_msg(conn, queue_id, NFQA_CFG_CMD, &cmd, sizeof(cmd));
+}
+
+int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
+		uint8_t mode) {
+	struct nfqnl_msg_config_params params = {
+		htonl(range),
+		mode
+	};
+	return send_msg(conn, queue_id, NFQA_CFG_PARAMS, &params, sizeof(params));
 }
 
 void *process(void *arg) {

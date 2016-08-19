@@ -20,16 +20,10 @@ int main(int argc, char *argv[]) {
 
 	/* must take care of message sequence numbers in order to
 		reliably track acknowledgements.*/
-	struct nfqnl_msg_config_cmd cmd = {
-		NFQNL_CFG_CMD_BIND
-	};
-	send_msg(&conn, id, NFQA_CFG_CMD, &cmd, sizeof(cmd)); //check ret
 
-	struct nfqnl_msg_config_params params = {
-		htonl(1000),
-		NFQNL_COPY_PACKET
-	};
-	send_msg(&conn, id, NFQA_CFG_PARAMS, &params, sizeof(params));
+	bind_queue(&conn, id);
+	set_mode(&conn, id, 1000, NFQNL_COPY_PACKET);
+
 
 	for(int i=0; i<3; i++) {
 		get_packet(&conn, &packet);
