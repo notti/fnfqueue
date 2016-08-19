@@ -54,8 +54,8 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode);
 
-void add_empty(struct nfq_connection *conn, struct nfq_packet *packet);
-void get_packet(struct nfq_connection *conn, struct nfq_packet **packet);
+void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n);
+int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n);
 
 
 #endif

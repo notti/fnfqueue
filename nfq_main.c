@@ -190,12 +190,17 @@ void close_connection(struct nfq_connection *conn) {
 	pthread_cond_destroy(&conn->error.cond);
 }
 
-void get_packet(struct nfq_connection *conn, struct nfq_packet **packet) {
+int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n) {
+	int i;
+	struct nfq_packet *p;
+
 	pthread_mutex_lock(&conn->msg.mutex);
 	for(;;) {
 		if (conn->msg.head != NULL) {
-			*packet = conn->msg.head;
-			conn->msg.head = (*packet)->next;
+			for (p=conn->msg.head, i=0; p && (i<n);
+					p = p->next, i++)
+				packet[i] = p;
+			conn->msg.head = p;
 			if (conn->msg.head == NULL) {
 				conn->msg.last = NULL;
 			}
@@ -204,25 +209,34 @@ void get_packet(struct nfq_connection *conn, struct nfq_packet **packet) {
 		pthread_cond_wait(&conn->msg.cond, &conn->msg.mutex);
 	}
 	pthread_mutex_unlock(&conn->msg.mutex);
+
+	return i;
 }
 
-void add_empty(struct nfq_connection *conn, struct nfq_packet *packet) {
-	for(int i=0; i<=NFQA_MAX; i++) {
-		packet->attr[i].buffer = NULL;
-		packet->attr[i].len = 0;
+void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n) {
+	int i,j;
+	for (j=0; j<n; j++) {
+		for(i=0; i<=NFQA_MAX; i++) {
+			packet[j].attr[i].buffer = NULL;
+			packet[j].attr[i].len = 0;
+		}
+		packet[j].error = 0;
+		packet[j].seq = 0;
+		if (j == (n - 1))
+			packet[j].next = NULL;
+		else
+			packet[j].next = &packet[j+1];
 	}
-	packet->error = 0;
-	packet->seq = 0;
-	packet->next = NULL;
-	
+
 	pthread_mutex_lock(&conn->empty.mutex);
 	if (conn->empty.head == NULL) {
-		conn->empty.head = packet;
+		conn->empty.head = &packet[0];
 	}
 	if (conn->empty.last != NULL) {
-		conn->empty.last->next = packet;
+		conn->empty.last->next = &packet[0];
 	}
-	conn->empty.last = packet;
+	conn->empty.last = &packet[n-1];
 	pthread_cond_broadcast(&conn->empty.cond);
 	pthread_mutex_unlock(&conn->empty.mutex);
 }
+

@@ -15,8 +15,8 @@ int main(int argc, char *argv[]) {
 	for(i = 0; i < 3; i++) {
 		packets[i].buffer = malloc(8192);
 		packets[i].len = 8192;
-		add_empty(&conn, &packets[i]);
 	}
+	add_empty(&conn, packets, 3);
 
 	/* must take care of message sequence numbers in order to
 		reliably track acknowledgements.*/
@@ -26,11 +26,11 @@ int main(int argc, char *argv[]) {
 
 
 	for(int i=0; i<3; i++) {
-		get_packet(&conn, &packet);
+		printf("get_packet: %d\n", get_packet(&conn, &packet, 1));
 		for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
 			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
 		printf("\n");
-		add_empty(&conn, packet);
+		add_empty(&conn, packet, 1);
 	}
 
 	close_connection(&conn);
@@ -41,5 +41,4 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-
 
