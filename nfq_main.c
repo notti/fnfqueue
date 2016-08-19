@@ -5,7 +5,8 @@
 #include <string.h> //remove
 #include <stdio.h> //remove
 
-ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
+ssize_t send_msg(struct nfq_connection *conn, uint16_t id, __u16 type,
+		void *data, size_t len) {
 	char buf[BASE_SIZE];
 	ssize_t ret;
 	void *buf_ass = buf;
@@ -14,14 +15,14 @@ ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 		.nlmsg_len = BASE_SIZE + NLMSG_ALIGN(len),
 		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_CONFIG,
 		.nlmsg_flags = NLM_F_REQUEST,// | NLM_F_ACK,
-		.nlmsg_seq = queue->seq++,
+		.nlmsg_seq = conn->seq++,
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nlmsghdr));
 	struct nfgenmsg *nfg = buf_ass;
 	*nfg = (struct nfgenmsg){
 		.nfgen_family = AF_UNSPEC,
 		.version = NFNETLINK_V0,
-		.res_id = htons(queue->id)
+		.res_id = htons(id)
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nfgenmsg));
 	struct nlattr *attr = buf_ass;
@@ -38,7 +39,7 @@ ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), iov, 3, NULL, 0, 0 };
 
-	if ((ret = sendmsg(queue->fd, &msg, 0)) == -1) {
+	if ((ret = sendmsg(conn->fd, &msg, 0)) == -1) {
 		return ret;
 	}
 
@@ -50,7 +51,7 @@ ssize_t send_msg(struct nfq_queue *queue, __u16 type, void *data, size_t len) {
 void *process(void *arg) {
 	int len;
 	int ignore;
-	struct nfq_queue *queue = arg;
+	struct nfq_connection *conn = arg;
 	struct iovec iov;
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
@@ -62,25 +63,25 @@ void *process(void *arg) {
 
 	for(;;) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
-		pthread_mutex_lock(&queue->empty.mutex);
+		pthread_mutex_lock(&conn->empty.mutex);
 		for(;;) {
-			if (queue->empty.head != NULL) {
-				packet = queue->empty.head;
-				queue->empty.head = packet->next;
-				if (queue->empty.head == NULL) {
-					queue->empty.last = NULL;
+			if (conn->empty.head != NULL) {
+				packet = conn->empty.head;
+				conn->empty.head = packet->next;
+				if (conn->empty.head == NULL) {
+					conn->empty.last = NULL;
 				}
 				break;
 			}
-			pthread_cond_wait(&queue->empty.cond, &queue->empty.mutex);
+			pthread_cond_wait(&conn->empty.cond, &conn->empty.mutex);
 		}
-		pthread_mutex_unlock(&queue->empty.mutex);
+		pthread_mutex_unlock(&conn->empty.mutex);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 		
 		iov.iov_base = packet->buffer;
 		iov.iov_len = packet->len;
 
-		len = recvmsg(queue->fd, &msg, 0);
+		len = recvmsg(conn->fd, &msg, 0);
 
 		nh = (struct nlmsghdr *) packet->buffer;
 
@@ -109,93 +110,87 @@ void *process(void *arg) {
 		}
 
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
-		pthread_mutex_lock(&queue->msg.mutex);
+		pthread_mutex_lock(&conn->msg.mutex);
 		packet->next = NULL;
-		if (queue->msg.head == NULL) {
-			queue->msg.head = packet;
+		if (conn->msg.head == NULL) {
+			conn->msg.head = packet;
 		}
-		if (queue->msg.last != NULL) {
-			queue->msg.last->next = packet;
+		if (conn->msg.last != NULL) {
+			conn->msg.last->next = packet;
 		}
-		queue->msg.last = packet;
-		pthread_cond_broadcast(&queue->msg.cond);
-		pthread_mutex_unlock(&queue->msg.mutex);
+		conn->msg.last = packet;
+		pthread_cond_broadcast(&conn->msg.cond);
+		pthread_mutex_unlock(&conn->msg.mutex);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 	}
 }
 
-void init_queue(struct nfq_queue *queue, uint16_t id) {
+void init_connection(struct nfq_connection *conn, int flags) {
 	struct sockaddr_nl sa = { AF_NETLINK };
 
-	if ((queue->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)) == -1) {
+	if ((conn->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)) == -1) {
 		perror("socket failed");
 		exit(-1);
 	}
-	if (bind(queue->fd, (struct sockaddr *) &sa, sizeof(sa))) {
+	if (bind(conn->fd, (struct sockaddr *) &sa, sizeof(sa))) {
 		perror("bind failed");
 		exit(-1);
 	}
 
-	queue->seq = 0;
-	queue->id = id;
+	conn->seq = 0;
 
-	queue->empty.head = NULL;
-	queue->empty.last = NULL;
-	queue->msg.head = NULL;
-	queue->msg.last = NULL;
-	queue->error.head = NULL;
-	queue->error.last = NULL;
+	conn->empty.head = NULL;
+	conn->empty.last = NULL;
+	conn->msg.head = NULL;
+	conn->msg.last = NULL;
+	conn->error.head = NULL;
+	conn->error.last = NULL;
 
-	pthread_mutex_init(&queue->empty.mutex,  NULL);
-	pthread_cond_init(&queue->empty.cond, NULL);
-	pthread_mutex_init(&queue->msg.mutex,  NULL);
-	pthread_cond_init(&queue->msg.cond, NULL);
-	pthread_mutex_init(&queue->error.mutex,  NULL);
-	pthread_cond_init(&queue->error.cond, NULL);
+	pthread_mutex_init(&conn->empty.mutex,  NULL);
+	pthread_cond_init(&conn->empty.cond, NULL);
+	pthread_mutex_init(&conn->msg.mutex,  NULL);
+	pthread_cond_init(&conn->msg.cond, NULL);
+	pthread_mutex_init(&conn->error.mutex,  NULL);
+	pthread_cond_init(&conn->error.cond, NULL);
 
-	struct nfqnl_msg_config_cmd cmd = {
-		NFQNL_CFG_CMD_BIND
-	};
-	send_msg(queue, NFQA_CFG_CMD, &cmd, sizeof(cmd)); //check ret
-
-	if (pthread_create(&queue->processing, NULL, process, queue)) {
+	if (pthread_create(&conn->processing, NULL, process, conn)) {
 		perror("pthread failed");
 		exit(-1);
 	}
 }
 
 
-void stop_queue(struct nfq_queue *queue) {
-	pthread_cancel(queue->processing);
-	pthread_join(queue->processing, NULL);
+void close_connection(struct nfq_connection *conn) {
+	pthread_cancel(conn->processing);
+	pthread_join(conn->processing, NULL);
 
-	close(queue->fd);
+	close(conn->fd);
 
-	pthread_mutex_destroy(&queue->empty.mutex);
-	pthread_cond_destroy(&queue->empty.cond);
-	pthread_mutex_destroy(&queue->msg.mutex);
-	pthread_cond_destroy(&queue->msg.cond);
-	pthread_mutex_destroy(&queue->error.mutex);
-	pthread_cond_destroy(&queue->error.cond);
+	pthread_mutex_destroy(&conn->empty.mutex);
+	pthread_cond_destroy(&conn->empty.cond);
+	pthread_mutex_destroy(&conn->msg.mutex);
+	pthread_cond_destroy(&conn->msg.cond);
+	pthread_mutex_destroy(&conn->error.mutex);
+	pthread_cond_destroy(&conn->error.cond);
 }
 
-void get_packet(struct nfq_queue *queue, struct nfq_packet **packet) {
-	pthread_mutex_lock(&queue->msg.mutex);
+void get_packet(struct nfq_connection *conn, struct nfq_packet **packet) {
+	pthread_mutex_lock(&conn->msg.mutex);
 	for(;;) {
-		if (queue->msg.head != NULL) {
-			*packet = queue->msg.head;
-			queue->msg.head = (*packet)->next;
-			if (queue->msg.head == NULL) {
-				queue->msg.last = NULL;
+		if (conn->msg.head != NULL) {
+			*packet = conn->msg.head;
+			conn->msg.head = (*packet)->next;
+			if (conn->msg.head == NULL) {
+				conn->msg.last = NULL;
 			}
 			break;
 		}
-		pthread_cond_wait(&queue->msg.cond, &queue->msg.mutex);
+		pthread_cond_wait(&conn->msg.cond, &conn->msg.mutex);
 	}
-	pthread_mutex_unlock(&queue->msg.mutex);
+	pthread_mutex_unlock(&conn->msg.mutex);
 }
 
-void add_empty(struct nfq_queue *queue, struct nfq_packet *packet) {
+void add_empty(struct nfq_connection *conn, struct nfq_packet *packet) {
 	for(int i=0; i<=NFQA_MAX; i++) {
 		packet->attr[i].buffer = NULL;
 		packet->attr[i].len = 0;
@@ -204,14 +199,14 @@ void add_empty(struct nfq_queue *queue, struct nfq_packet *packet) {
 	packet->seq = 0;
 	packet->next = NULL;
 	
-	pthread_mutex_lock(&queue->empty.mutex);
-	if (queue->empty.head == NULL) {
-		queue->empty.head = packet;
+	pthread_mutex_lock(&conn->empty.mutex);
+	if (conn->empty.head == NULL) {
+		conn->empty.head = packet;
 	}
-	if (queue->empty.last != NULL) {
-		queue->empty.last->next = packet;
+	if (conn->empty.last != NULL) {
+		conn->empty.last->next = packet;
 	}
-	queue->empty.last = packet;
-	pthread_cond_broadcast(&queue->empty.cond);
-	pthread_mutex_unlock(&queue->empty.mutex);
+	conn->empty.last = packet;
+	pthread_cond_broadcast(&conn->empty.cond);
+	pthread_mutex_unlock(&conn->empty.mutex);
 }
