@@ -136,8 +136,8 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 	for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLA_ALIGN(sizeof(struct nfgenmsg)));
 			(attr < (struct nlattr*)(nh + nh->nlmsg_len)) && (attr->nla_len >= sizeof(struct nlattr));
 			attr = (struct nlattr *)((void *)attr + NLA_ALIGN(attr->nla_len))) {
-		packet->attr[attr->nla_type].buffer = (void*)attr + NLA_HDRLEN;
-		packet->attr[attr->nla_type].len = attr->nla_len - NLA_HDRLEN;
+		packet->attr[attr->nla_type & NLA_TYPE_MASK].buffer = (void*)attr + NLA_HDRLEN;
+		packet->attr[attr->nla_type & NLA_TYPE_MASK].len = attr->nla_len - NLA_HDRLEN;
 	}
 }
 
