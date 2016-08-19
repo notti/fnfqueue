@@ -39,18 +39,17 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	iov[0] = (struct iovec){buf, NFQ_BASE_SIZE};
 
 	for(int i=0; i<n; i++) {
-		a = &attr_buf[i];
-		*a = (struct nlattr){
-			.nla_len = NLA_HDRLEN + attr[i].len,
-			.nla_type = attr[i].type
-		};
-		iov[1 + i*3] = (struct iovec){&attr_buf[i],
+		a = &attr_buf[i * NLA_HDRLEN];
+		a->nla_len = NLA_HDRLEN + attr[i].len;
+		a->nla_type = attr[i].type;
+		iov[1 + i*3] = (struct iovec){&attr_buf[i*NLA_HDRLEN],
 			NLA_HDRLEN};
 		iov[1 + i*3 + 1] = (struct iovec){attr[i].buffer,
 			attr[i].len};
 		iov[1 + i*3 + 2] = (struct iovec){buf,
 			NLA_ALIGN(a->nla_len) - a->nla_len};
 		nh->nlmsg_len += NLA_ALIGN(a->nla_len);
+		printf("len: %d\n", a->nla_type);
 	}
 
 	struct sockaddr_nl sa = { AF_NETLINK };
@@ -136,17 +135,40 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle) {
+	int n = 1;
 	struct nfqnl_msg_packet_hdr *hdr = packet->attr[NFQA_PACKET_HDR].buffer;
 	struct nfqnl_msg_verdict_hdr verdict_hdr = {
 		htonl(verdict),
 		hdr->packet_id
 	};
-	struct nfq_attr attr = {
+	struct nfq_attr attr[MANGLE_MAX+1] = {
+	{
 		&verdict_hdr,
 		sizeof(verdict_hdr),
 		NFQA_VERDICT_HDR
+	},
 	};
-	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, &attr, 1);
+	if (mangle & MANGLE_MARK) {
+		attr[n] = packet->attr[NFQA_MARK];
+		n++;
+	}
+	if (mangle & MANGLE_PAYLOAD) {
+		attr[n] = packet->attr[NFQA_PAYLOAD];
+		n++;
+	}
+	if (mangle & MANGLE_CT) {
+		attr[n] = packet->attr[NFQA_CT];
+		n++;
+	}
+	if (mangle & MANGLE_EXP) {
+		attr[n] = packet->attr[NFQA_EXP];
+		n++;
+	}
+	if (mangle & MANGLE_VLAN) {
+		attr[n] = packet->attr[NFQA_VLAN];
+		n++;
+	}
+	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n);
 }
 
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
@@ -326,6 +348,7 @@ void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n) {
 		for(i=0; i<=NFQA_MAX; i++) {
 			packet[j].attr[i].buffer = NULL;
 			packet[j].attr[i].len = 0;
+			packet[j].attr[i].type = i;
 		}
 		packet[j].error = 0;
 		packet[j].seq = 0;

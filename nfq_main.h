@@ -16,6 +16,15 @@
 #define NF_REPEAT 4
 #define NF_STOP 5
 
+#define MANGLE_MARK    (1 << 0)
+#define MANGLE_PAYLOAD (1 << 1)
+#define MANGLE_CT      (1 << 2)
+#define MANGLE_EXP     (1 << 3)
+#define MANGLE_VLAN    (1 << 4)
+
+#define MANGLE_MAX     5
+
+
 struct nfq_attr {
 	void *buffer;
 	size_t len;
