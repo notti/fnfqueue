@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
 		for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
 			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
 		printf("\n");
+		printf("verdict: %d\n", set_verdict(&conn, packet, NF_ACCEPT, 0));
 		add_empty(&conn, packet, 1);
 	}
 

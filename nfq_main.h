@@ -9,6 +9,13 @@
 #include <linux/netfilter/nfnetlink_queue.h>
 #include <arpa/inet.h>
 
+#define NF_DROP 0
+#define NF_ACCEPT 1
+#define NF_STOLEN 2
+#define NF_QUEUE 3
+#define NF_REPEAT 4
+#define NF_STOP 5
+
 struct nfq_attr {
 	void *buffer;
 	size_t len;
@@ -61,6 +68,8 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 
 void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n);
 int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n);
+int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
+		uint32_t verdict, uint32_t mangle);
 
 
 #endif

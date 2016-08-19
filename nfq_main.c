@@ -134,6 +134,21 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
 }
 
+int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
+		uint32_t verdict, uint32_t mangle) {
+	struct nfqnl_msg_packet_hdr *hdr = packet->attr[NFQA_PACKET_HDR].buffer;
+	struct nfqnl_msg_verdict_hdr verdict_hdr = {
+		htonl(verdict),
+		hdr->packet_id
+	};
+	struct nfq_attr attr = {
+		&verdict_hdr,
+		sizeof(verdict_hdr),
+		NFQA_VERDICT_HDR
+	};
+	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, &attr, 1);
+}
+
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 	struct nlmsghdr *nh = packet->buffer;
 	struct nfgenmsg *nfg;
