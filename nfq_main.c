@@ -89,6 +89,13 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
 	return send_msg(conn, queue_id, NFQA_CFG_CMD, &cmd, sizeof(cmd));
 }
 
+int unbind_queue(struct nfq_connection *conn, uint16_t queue_id) {
+	struct nfqnl_msg_config_cmd cmd = {
+		NFQNL_CFG_CMD_UNBIND
+	};
+	return send_msg(conn, queue_id, NFQA_CFG_CMD, &cmd, sizeof(cmd));
+}
+
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode) {
 	struct nfqnl_msg_config_params params = {

@@ -52,6 +52,7 @@ void init_connection(struct nfq_connection *conn, int flags);
 void close_connection(struct nfq_connection *conn);
 
 int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
+int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode);
 
