@@ -12,6 +12,7 @@
 struct nfq_attr {
 	void *buffer;
 	size_t len;
+	uint16_t type;
 };
 
 struct nfq_packet {
@@ -42,11 +43,10 @@ struct nfq_connection {
 };
 
 #define NFQ_BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
-		       NLMSG_ALIGN(sizeof(struct nfgenmsg)) + \
-		       NLMSG_ALIGN(sizeof(struct nlattr)))
+		       NLMSG_ALIGN(sizeof(struct nfgenmsg)))
 
-int send_msg(struct nfq_connection *conn, uint16_t queue_id, uint16_t type,
-		void *data, size_t len);
+int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
+		struct nfq_attr *attr, int n);
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet);
 void init_connection(struct nfq_connection *conn, int flags);
 void close_connection(struct nfq_connection *conn);

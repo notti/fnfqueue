@@ -7,7 +7,7 @@
 #include <stdio.h> //remove
 
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
-		void *data, size_t len) {
+		struct nfq_attr *attr, int n) {
 	char buf[NFQ_BASE_SIZE];
 	ssize_t ret;
 	void *buf_ass = buf;
@@ -18,8 +18,8 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		conn->seq = 1;
 
 	*nh = (struct nlmsghdr){
-		.nlmsg_len = NFQ_BASE_SIZE + NLMSG_ALIGN(len),
-		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_CONFIG,
+		.nlmsg_len = NFQ_BASE_SIZE,
+		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | type,
 		.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK,
 		.nlmsg_seq = conn->seq,
 	};
@@ -31,23 +31,37 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		.res_id = htons(id)
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nfgenmsg));
-	struct nlattr *attr = buf_ass;
-	*attr = (struct nlattr){
-		.nla_len = NLMSG_ALIGN(sizeof(struct nlattr)) + len,
-		.nla_type = type
-	};
 
-	struct iovec iov[] = {
-		{buf, NFQ_BASE_SIZE},
-		{data, len},
-		{buf, NLMSG_ALIGN(len) - len}
-	};
+	void *attr_buf = malloc(n * NLA_HDRLEN);
+	struct nlattr *a;
+	struct iovec *iov = malloc((n*3+1)*sizeof(struct iovec));
+
+	iov[0] = (struct iovec){buf, NFQ_BASE_SIZE};
+
+	for(int i=0; i<n; i++) {
+		a = &attr_buf[i];
+		*a = (struct nlattr){
+			.nla_len = NLA_HDRLEN + attr[i].len,
+			.nla_type = attr[i].type
+		};
+		iov[1 + i*3] = (struct iovec){&attr_buf[i],
+			NLA_HDRLEN};
+		iov[1 + i*3 + 1] = (struct iovec){attr[i].buffer,
+			attr[i].len};
+		iov[1 + i*3 + 2] = (struct iovec){buf,
+			NLA_ALIGN(a->nla_len) - a->nla_len};
+		nh->nlmsg_len += NLA_ALIGN(a->nla_len);
+	}
+
 	struct sockaddr_nl sa = { AF_NETLINK };
-	struct msghdr msg = { &sa, sizeof(sa), iov, 3, NULL, 0, 0 };
+	struct msghdr msg = { &sa, sizeof(sa), iov, 1 + n*3, NULL, 0, 0 };
 
 	if ((ret = sendmsg(conn->fd, &msg, 0)) == -1) {
 		return ret;
 	}
+
+	free(attr_buf);
+	free(iov);
 
 	struct nfq_packet *cur, *prev;
 
@@ -86,14 +100,24 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_BIND
 	};
-	return send_msg(conn, queue_id, NFQA_CFG_CMD, &cmd, sizeof(cmd));
+	struct nfq_attr attr = {
+		&cmd,
+		sizeof(cmd),
+		NFQA_CFG_CMD
+	};
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
 }
 
 int unbind_queue(struct nfq_connection *conn, uint16_t queue_id) {
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_UNBIND
 	};
-	return send_msg(conn, queue_id, NFQA_CFG_CMD, &cmd, sizeof(cmd));
+	struct nfq_attr attr = {
+		&cmd,
+		sizeof(cmd),
+		NFQA_CFG_CMD
+	};
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
 }
 
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
@@ -102,7 +126,12 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		htonl(range),
 		mode
 	};
-	return send_msg(conn, queue_id, NFQA_CFG_PARAMS, &params, sizeof(params));
+	struct nfq_attr attr = {
+		&params,
+		sizeof(params),
+		NFQA_CFG_PARAMS
+	};
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
 }
 
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
