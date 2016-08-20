@@ -49,7 +49,6 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		iov[1 + i*3 + 2] = (struct iovec){buf,
 			NLA_ALIGN(a->nla_len) - a->nla_len};
 		nh->nlmsg_len += NLA_ALIGN(a->nla_len);
-		printf("len: %d\n", a->nla_type);
 	}
 
 	struct sockaddr_nl sa = { AF_NETLINK };
@@ -184,7 +183,7 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 
 	if (nh->nlmsg_type == NLMSG_ERROR) {
 		struct nlmsgerr *err = NLMSG_DATA(nh);
-		packet->error = -err->error;
+		packet->error = err->error;
 		if (packet->error == 0)
 			packet->error = 1;
 		return;
