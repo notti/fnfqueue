@@ -136,10 +136,9 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle) {
 	int n = 1;
-	struct nfqnl_msg_packet_hdr *hdr = packet->attr[NFQA_PACKET_HDR].buffer;
 	struct nfqnl_msg_verdict_hdr verdict_hdr = {
 		htonl(verdict),
-		hdr->packet_id
+		htonl(packet->id)
 	};
 	struct nfq_attr attr[MANGLE_MAX+1] = {
 	{
@@ -205,6 +204,9 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].buffer = (void*)attr + NLA_HDRLEN;
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].len = attr->nla_len - NLA_HDRLEN;
 	}
+
+	struct nfqnl_msg_packet_hdr *hdr = packet->attr[NFQA_PACKET_HDR].buffer;
+	packet->id = ntohl(hdr->packet_id);
 }
 
 void *process(void *arg) {
@@ -228,6 +230,8 @@ void *process(void *arg) {
 				}
 				break;
 			}
+			//possible deadlock: what do we do if we run out of
+			//buffers?
 			pthread_cond_wait(&conn->empty.cond, &conn->empty.mutex);
 		}
 		pthread_mutex_unlock(&conn->empty.mutex);

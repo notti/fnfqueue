@@ -37,6 +37,7 @@ struct nfq_packet {
 	int error;
 	uint32_t  seq;
 	uint16_t queue_id;
+	uint32_t id;
 	struct nfq_attr attr[NFQA_MAX + 1];
 	struct nfq_packet *next;
 };
@@ -73,12 +74,14 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode);
 //maxlen
 //flags
-//verdict
+//batch_verdict
 
 void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n);
 int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n);
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle);
+
+#define HAS_ATTR(packet, x) (packet->attr[x].buffer != NULL)
 
 
 #endif

@@ -7,17 +7,17 @@
 int main(int argc, char *argv[]) {
 
 	struct nfq_connection conn;
-	struct nfq_packet packets[3];
+	struct nfq_packet packets[4];
 	struct nfq_packet *packet;
 	int i;
 	int id = 1;
 
 	init_connection(&conn, 0);
-	for(i = 0; i < 3; i++) {
+	for(i = 0; i < 4; i++) {
 		packets[i].buffer = malloc(8192);
 		packets[i].len = 8192;
 	}
-	add_empty(&conn, packets, 3);
+	add_empty(&conn, packets, 4);
 
 	printf("bind: %s\n", strerror(bind_queue(&conn, id)));
 	printf("set_mode: %s\n", strerror(set_mode(&conn, id, 1000, NFQNL_COPY_PACKET)));
@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
 			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
 		printf("\n");
 		printf("verdict: %s\n", strerror(set_verdict(&conn, packet, NF_ACCEPT, MANGLE_PAYLOAD)));
-		add_empty(&conn, packet, 1);
+	//	add_empty(&conn, packet, 1);
 	}
 
 	close_connection(&conn);
