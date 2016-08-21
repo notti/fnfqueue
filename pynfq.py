@@ -5,6 +5,7 @@ import os
 
 class Packet:
     def __init__(self, conn, p):
+        self.cache = {}
         self.packet = p
         self.conn = conn
 
@@ -13,6 +14,24 @@ class Packet:
         if ret:
             raise OSError(ret, 'Could not set packet verdict: ' + os.strerror(re))
         lib.add_empty(self.conn, self.packet[0], 1) #invalidate packet
+
+    def __getattr__(self, name):
+        if name in self.cache:
+            return self.cache[name]
+        if name == 'payload':
+            #cache buffer + change buffer to modifyable beyond len
+            self.cache[name] = ffi.buffer(ffi.cast("char *",
+                        self.packet[0].attr[lib.NFQA_PAYLOAD].buffer),
+                        self.packet[0].attr[lib.NFQA_PAYLOAD].len)
+            return self.cache[name]
+        raise AttributeError
+
+    def __setattr__(self, name, value):
+        if name == 'cache':
+            super().__setattr__(name, value)
+        if name in self.cache:
+            self.cache[name] = value #modify self.packet[0]!
+        super().__setattr__(name, value)
 
 
 #change to context manager!
