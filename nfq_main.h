@@ -46,7 +46,7 @@ struct nfq_list {
 	struct nfq_packet *head;
 	struct nfq_packet *last;
 	pthread_mutex_t mutex;
-	pthread_cond_t cond;
+	int cond;
 };
 
 struct nfq_connection {

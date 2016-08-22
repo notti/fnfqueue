@@ -58,7 +58,8 @@ class Connection:
 
     def __next__(self):
         p = ffi.new("struct nfq_packet * *")
-        lib.get_packet(self.conn, p, 1)
+        while lib.get_packet(self.conn, p, 1) != 1:
+            pass
         return Packet(self.conn, p)
         
     def bind(self, queue):

@@ -6,6 +6,16 @@
 #include <string.h> //remove
 #include <stdio.h> //remove
 
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <limits.h>
+
+#define futex_wait(addr, val) syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, val, NULL, \
+		NULL, 0)
+#define futex_wake_all(addr) syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, \
+		INT_MAX, NULL, NULL, 0)
+
+
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n) {
 	char buf[NFQ_BASE_SIZE];
@@ -63,6 +73,7 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 
 	struct nfq_packet *cur, *prev;
 
+	int wait;
 	pthread_mutex_lock(&conn->error.mutex);
 	for(;;) {
 		prev = NULL;
@@ -81,7 +92,10 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		}
 		if (cur && (cur->seq == conn->seq))
 			break;
-		pthread_cond_wait(&conn->error.cond, &conn->error.mutex);
+		wait = conn->error.cond;
+		pthread_mutex_unlock(&conn->error.mutex);
+		futex_wait(&conn->error.cond, wait); //check ret!
+		pthread_mutex_lock(&conn->error.mutex);
 	}
 	pthread_mutex_unlock(&conn->error.mutex);
 
@@ -216,6 +230,7 @@ void *process(void *arg) {
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 	struct nfq_packet *packet;
+	int wait;
 
 	for(;;) {
 		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
@@ -231,7 +246,10 @@ void *process(void *arg) {
 			}
 			//possible deadlock: what do we do if we run out of
 			//buffers?
-			pthread_cond_wait(&conn->empty.cond, &conn->empty.mutex);
+			wait = conn->empty.cond;
+			pthread_mutex_unlock(&conn->empty.mutex);
+			futex_wait(&conn->empty.cond, wait); //check ret/cancel!
+			pthread_mutex_lock(&conn->empty.mutex);
 		}
 		pthread_mutex_unlock(&conn->empty.mutex);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
@@ -255,8 +273,9 @@ void *process(void *arg) {
 				conn->error.last->next = packet;
 			}
 			conn->error.last = packet;
-			pthread_cond_broadcast(&conn->error.cond);
+			conn->error.cond++;
 			pthread_mutex_unlock(&conn->error.mutex);
+			futex_wake_all(&conn->error.cond);
 		} else {
 			pthread_mutex_lock(&conn->msg.mutex);
 			if (conn->msg.head == NULL) {
@@ -266,8 +285,9 @@ void *process(void *arg) {
 				conn->msg.last->next = packet;
 			}
 			conn->msg.last = packet;
-			pthread_cond_broadcast(&conn->msg.cond);
+			conn->msg.cond++;
 			pthread_mutex_unlock(&conn->msg.mutex);
+			futex_wake_all(&conn->msg.cond);
 		}
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 	}
@@ -295,11 +315,11 @@ void init_connection(struct nfq_connection *conn, int flags) {
 	conn->error.last = NULL;
 
 	pthread_mutex_init(&conn->empty.mutex,  NULL);
-	pthread_cond_init(&conn->empty.cond, NULL);
+	conn->empty.cond = 0;
 	pthread_mutex_init(&conn->msg.mutex,  NULL);
-	pthread_cond_init(&conn->msg.cond, NULL);
+	conn->msg.cond = 0;
 	pthread_mutex_init(&conn->error.mutex,  NULL);
-	pthread_cond_init(&conn->error.cond, NULL);
+	conn->error.cond = 0;
 
 	if (pthread_create(&conn->processing, NULL, process, conn)) {
 		perror("pthread failed");
@@ -315,16 +335,14 @@ void close_connection(struct nfq_connection *conn) {
 	close(conn->fd);
 
 	pthread_mutex_destroy(&conn->empty.mutex);
-	pthread_cond_destroy(&conn->empty.cond);
 	pthread_mutex_destroy(&conn->msg.mutex);
-	pthread_cond_destroy(&conn->msg.cond);
 	pthread_mutex_destroy(&conn->error.mutex);
-	pthread_cond_destroy(&conn->error.cond);
 }
 
 int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n) {
 	int i;
 	struct nfq_packet *p;
+	int wait;
 
 	pthread_mutex_lock(&conn->msg.mutex);
 	for(;;) {
@@ -338,7 +356,11 @@ int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n) {
 			}
 			break;
 		}
-		pthread_cond_wait(&conn->msg.cond, &conn->msg.mutex);
+		wait = conn->msg.cond;
+		pthread_mutex_unlock(&conn->msg.mutex);
+		if (futex_wait(&conn->msg.cond, wait) == -1 && errno == EINTR)
+			return 0;
+		pthread_mutex_lock(&conn->msg.mutex);
 	}
 	pthread_mutex_unlock(&conn->msg.mutex);
 
@@ -369,7 +391,8 @@ void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n) {
 		conn->empty.last->next = &packet[0];
 	}
 	conn->empty.last = &packet[n-1];
-	pthread_cond_broadcast(&conn->empty.cond);
+	conn->empty.cond++;
 	pthread_mutex_unlock(&conn->empty.mutex);
+	futex_wake_all(&conn->empty.cond);
 }
 
