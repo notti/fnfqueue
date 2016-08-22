@@ -29,8 +29,10 @@ class Packet:
     def __setattr__(self, name, value):
         if name == 'cache':
             super().__setattr__(name, value)
-        if name in self.cache:
-            self.cache[name] = value #modify self.packet[0]!
+        if name == 'payload':
+            self.cache[name] = value
+            self.packet[0].attr[lib.NFQA_PAYLOAD].buffer = ffi.new("char []", value)
+            self.packet[0].attr[lib.NFQA_PAYLOAD].len = len(value)
         super().__setattr__(name, value)
 
 
@@ -62,12 +64,12 @@ class Connection:
     def bind(self, queue):
         ret = lib.bind_queue(self.conn, queue)
         if ret:
-            raise OSError(ret, 'Could not bind queue: ' + os.strerror(re))
+            raise OSError(ret, 'Could not bind queue: ' + os.strerror(ret))
 
     def set_mode(self, queue, size, mode):
         ret = lib.set_mode(self.conn, queue, size, mode)
         if ret:
-            raise OSError(ret, 'Could not change mode: ' + os.strerror(re))
+            raise OSError(ret, 'Could not change mode: ' + os.strerror(ret))
 
     def close(self):
         lib.close_connection(self.conn)
