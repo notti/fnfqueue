@@ -39,19 +39,24 @@ class Packet:
 #change to context manager!
 class Connection:
     def __init__(self):
-        num = 10
-        size = 8192
+        self.num = 1
+        self.size = 8192
         self.conn = ffi.new("struct nfq_connection *");
         lib.init_connection(self.conn, 0)
+        self._userdata = ffi.new_handle(self)
+        lib.set_empty_cb(self.conn, lib.empty_cb, self._userdata)
         self.buffers = []
+        self.packets = []
 
-        self.packets = ffi.new("struct nfq_packet[]", num);
-        for i in range(num):
+    def add_buffers(self):
+        packets = ffi.new("struct nfq_packet[]", self.num);
+        self.packets.append(packets)
+        for i in range(self.num):
             b = ffi.new("char []", 8192)
             self.buffers.append(b)
-            self.packets[i].buffer = b
-            self.packets[i].len = 8192
-        lib.add_empty(self.conn, self.packets, num)
+            packets[i].buffer = b
+            packets[i].len = self.size 
+        lib.add_empty(self.conn, packets, self.num)
 
     def __iter__(self):
         return self
@@ -75,3 +80,9 @@ class Connection:
     def close(self):
         lib.close_connection(self.conn)
 
+
+@ffi.def_extern()
+def empty_cb(conn, s):
+    print("empty")
+    s = ffi.from_handle(s)
+    s.add_buffers()

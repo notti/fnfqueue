@@ -226,9 +226,6 @@ void *process(void *arg) {
 	int len;
 	int ignore;
 	struct nfq_connection *conn = arg;
-	struct iovec iov;
-	struct sockaddr_nl sa = { AF_NETLINK };
-	struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 	struct nfq_packet *packet;
 	int wait;
 
@@ -244,20 +241,25 @@ void *process(void *arg) {
 				}
 				break;
 			}
-			//possible deadlock: what do we do if we run out of
-			//buffers?
 			wait = conn->empty.cond;
 			pthread_mutex_unlock(&conn->empty.mutex);
-			futex_wait(&conn->empty.cond, wait); //check ret/cancel!
+			if(conn->empty_cb)
+				conn->empty_cb(conn, conn->empty_data);
+			futex_wait(&conn->empty.cond, wait);
 			pthread_mutex_lock(&conn->empty.mutex);
 		}
 		pthread_mutex_unlock(&conn->empty.mutex);
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 		
+		struct iovec iov;
+		struct sockaddr_nl sa = { AF_NETLINK };
+		struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
 		iov.iov_base = packet->buffer;
 		iov.iov_len = packet->len;
 
 		len = recvmsg(conn->fd, &msg, 0);
+		if (len == -1)
+			perror("recvmsg wtf");
 
 		parse_packet(&msg, packet);
 
@@ -274,8 +276,8 @@ void *process(void *arg) {
 			}
 			conn->error.last = packet;
 			conn->error.cond++;
-			pthread_mutex_unlock(&conn->error.mutex);
 			futex_wake_all(&conn->error.cond);
+			pthread_mutex_unlock(&conn->error.mutex);
 		} else {
 			pthread_mutex_lock(&conn->msg.mutex);
 			if (conn->msg.head == NULL) {
@@ -286,23 +288,22 @@ void *process(void *arg) {
 			}
 			conn->msg.last = packet;
 			conn->msg.cond++;
-			pthread_mutex_unlock(&conn->msg.mutex);
 			futex_wake_all(&conn->msg.cond);
+			pthread_mutex_unlock(&conn->msg.mutex);
 		}
 		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
 	}
 }
 
-void init_connection(struct nfq_connection *conn, int flags) {
+int init_connection(struct nfq_connection *conn, int flags) {
 	struct sockaddr_nl sa = { AF_NETLINK };
 
 	if ((conn->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)) == -1) {
-		perror("socket failed");
-		exit(-1);
+		return -1;
 	}
 	if (bind(conn->fd, (struct sockaddr *) &sa, sizeof(sa))) {
-		perror("bind failed");
-		exit(-1);
+		close(conn->fd);
+		return -1;
 	}
 
 	conn->seq = 0;
@@ -322,9 +323,16 @@ void init_connection(struct nfq_connection *conn, int flags) {
 	conn->error.cond = 0;
 
 	if (pthread_create(&conn->processing, NULL, process, conn)) {
-		perror("pthread failed");
-		exit(-1);
+		close(conn->fd);
+		return -1;
 	}
+	return 0;
+}
+
+void set_empty_cb(struct nfq_connection *conn,
+		void (*cb)(struct nfq_connection*, void*), void *data) {
+	conn->empty_cb = cb;
+	conn->empty_data = data;
 }
 
 
@@ -392,7 +400,7 @@ void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n) {
 	}
 	conn->empty.last = &packet[n-1];
 	conn->empty.cond++;
-	pthread_mutex_unlock(&conn->empty.mutex);
 	futex_wake_all(&conn->empty.cond);
+	pthread_mutex_unlock(&conn->empty.mutex);
 }
 

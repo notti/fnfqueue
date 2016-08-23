@@ -54,6 +54,8 @@ struct nfq_connection {
 	uint32_t seq;
 // synchronous version?
 	pthread_t processing;
+	void (*empty_cb)(struct nfq_connection *, void*);
+	void *empty_data;
 	struct nfq_list empty;
 	struct nfq_list msg;
 	struct nfq_list error;
@@ -65,8 +67,10 @@ struct nfq_connection {
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n);
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet);
-void init_connection(struct nfq_connection *conn, int flags);
+int init_connection(struct nfq_connection *conn, int flags);
 void close_connection(struct nfq_connection *conn);
+void set_empty_cb(struct nfq_connection *conn,
+		void (*cb)(struct nfq_connection*, void*), void *data);
 
 int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
