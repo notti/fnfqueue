@@ -18,14 +18,14 @@ void cb(struct nfq_connection *conn, void *data) {
 		buf = buf->next;
 	buf->next = malloc(sizeof(struct buffer));
 	buf = buf->next;
-	buf->packets = malloc(3 * sizeof(struct nfq_packet));
-	buf->num = 3;
+	buf->packets = malloc(10 * sizeof(struct nfq_packet));
+	buf->num = 10;
 	buf->next = NULL;
-	for(i = 0; i < 3; i++) {
+	for(i = 0; i < 10; i++) {
 		buf->packets[i].buffer = malloc(8192);
 		buf->packets[i].len = 8192;
 	}
-	add_empty(conn, buf->packets, 3);
+	add_empty(conn, buf->packets, 10);
 }
 
 int main(int argc, char *argv[]) {
@@ -38,27 +38,26 @@ int main(int argc, char *argv[]) {
 
 	init_connection(&conn, 0);
 	buf = malloc(sizeof(struct buffer));
-	buf->packets = malloc(3 * sizeof(struct nfq_packet));
-	buf->num = 3;
+	buf->packets = malloc(10 * sizeof(struct nfq_packet));
+	buf->num = 10;
 	buf->next = NULL;
-	for(i = 0; i < 3; i++) {
+	for(i = 0; i < 10; i++) {
 		buf->packets[i].buffer = malloc(8192);
 		buf->packets[i].len = 8192;
 	}
-	add_empty(&conn, buf->packets, 3);
+	add_empty(&conn, buf->packets, 10);
 	set_empty_cb(&conn, cb, buf);
 
 	printf("bind: %s\n", strerror(bind_queue(&conn, id)));
 	printf("set_mode: %s\n", strerror(set_mode(&conn, id, 1000, NFQNL_COPY_PACKET)));
 
 
-	for(int i=0; i<3; i++) {
-		printf("get_packet: %d ", get_packet(&conn, &packet, 1));
-		printf("seq: %d\n", packet->seq);
-		for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
-			printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
-		printf("\n");
-	//	printf("verdict: %s\n", strerror(set_verdict(&conn, packet, NF_ACCEPT, MANGLE_PAYLOAD)));
+	for(;;) {
+		get_packet(&conn, &packet, 1);
+	//	for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
+	//		printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
+	//	printf("\n");
+		set_verdict(&conn, packet, NF_ACCEPT, MANGLE_PAYLOAD);
 		add_empty(&conn, packet, 1);
 	}
 

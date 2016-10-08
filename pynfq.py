@@ -39,14 +39,15 @@ class Packet:
 #change to context manager!
 class Connection:
     def __init__(self):
-        self.num = 1
+        self.num = 10
         self.size = 8192
         self.conn = ffi.new("struct nfq_connection *");
         lib.init_connection(self.conn, 0)
         self._userdata = ffi.new_handle(self)
-        lib.set_empty_cb(self.conn, lib.empty_cb, self._userdata)
         self.buffers = []
         self.packets = []
+        lib.set_empty_cb(self.conn, lib.empty_cb, self._userdata)
+        self.add_buffers()
 
     def add_buffers(self):
         packets = ffi.new("struct nfq_packet[]", self.num);
