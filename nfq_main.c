@@ -1,23 +1,17 @@
+#define _GNU_SOURCE //we want recvmmsg
 #include "nfq_main.h"
 #include <sys/socket.h>
 #include <errno.h>
+
+#include <alloca.h>
 
 #include <stdlib.h> //remove
 #include <string.h> //remove
 #include <stdio.h> //remove
 
-#include <linux/futex.h>
-#include <sys/syscall.h>
-#include <limits.h>
-
-#define futex_wait(addr, val) syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, val, NULL, \
-		NULL, 0)
-#define futex_wake_all(addr) syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, \
-		INT_MAX, NULL, NULL, 0)
-
-
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n) {
+	//Add synchronous version
 	char buf[NFQ_BASE_SIZE];
 	ssize_t ret;
 	void *buf_ass = buf;
@@ -30,7 +24,7 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	*nh = (struct nlmsghdr){
 		.nlmsg_len = NFQ_BASE_SIZE,
 		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | type,
-		.nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK,
+		.nlmsg_flags = NLM_F_REQUEST, // | NLM_F_ACK,
 		.nlmsg_seq = conn->seq,
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nlmsghdr));
@@ -71,41 +65,7 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	free(attr_buf);
 	free(iov);
 
-	struct nfq_packet *cur, *prev;
-
-	int wait;
-	pthread_mutex_lock(&conn->error.mutex);
-	for(;;) {
-		prev = NULL;
-		for (cur=conn->error.head; cur; prev = cur, cur=cur->next) {
-			if (cur->seq == conn->seq) {
-				if (prev == NULL)
-					conn->error.head = cur->next;
-				else
-					prev->next = cur->next;
-				if (conn->error.head == NULL)
-					conn->error.last = NULL;
-				else if(conn->error.last == cur)
-					conn->error.last = prev;
-				break;
-			}
-		}
-		if (cur && (cur->seq == conn->seq))
-			break;
-		wait = conn->error.cond;
-		pthread_mutex_unlock(&conn->error.mutex);
-		futex_wait(&conn->error.cond, wait); //check ret!
-		pthread_mutex_lock(&conn->error.mutex);
-	}
-	pthread_mutex_unlock(&conn->error.mutex);
-
-	ret = cur->error;
-
-	add_empty(conn, cur, 1);
-
-	if (ret == 1) //ACK
-		return 0;
-	return ret;
+	return 0;
 }
 
 int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
@@ -162,28 +122,33 @@ int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 	};
 	if (mangle & MANGLE_MARK) {
 		attr[n] = packet->attr[NFQA_MARK];
+		attr[n].type = NFQA_MARK;
 		n++;
 	}
 	if (mangle & MANGLE_PAYLOAD) {
 		attr[n] = packet->attr[NFQA_PAYLOAD];
+		attr[n].type = NFQA_PAYLOAD;
 		n++;
 	}
 	if (mangle & MANGLE_CT) {
 		attr[n] = packet->attr[NFQA_CT];
+		attr[n].type = NFQA_CT;
 		n++;
 	}
 	if (mangle & MANGLE_EXP) {
 		attr[n] = packet->attr[NFQA_EXP];
+		attr[n].type = NFQA_EXP;
 		n++;
 	}
 	if (mangle & MANGLE_VLAN) {
 		attr[n] = packet->attr[NFQA_VLAN];
+		attr[n].type = NFQA_VLAN;
 		n++;
 	}
 	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n);
 }
 
-void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
+void parse_packet(struct msghdr *msg, struct nfq_packet *packet, ssize_t len) {
 	struct nlmsghdr *nh = packet->buffer;
 	struct nfgenmsg *nfg;
 	struct nlattr *attr;
@@ -212,7 +177,9 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 	packet->queue_id = ntohs(nfg->res_id);
 
 	for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLA_ALIGN(sizeof(struct nfgenmsg)));
-			(attr < (struct nlattr*)(nh + nh->nlmsg_len)) && (attr->nla_len >= sizeof(struct nlattr));
+			(attr < (struct nlattr*)(nh + nh->nlmsg_len)) &&
+			(attr->nla_len >= sizeof(struct nlattr)) &&
+			(void*)attr < (packet->buffer + len);
 			attr = (struct nlattr *)((void *)attr + NLA_ALIGN(attr->nla_len))) {
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].buffer = (void*)attr + NLA_HDRLEN;
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].len = attr->nla_len - NLA_HDRLEN;
@@ -222,77 +189,62 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet) {
 	packet->id = ntohl(hdr->packet_id);
 }
 
-void *process(void *arg) {
+int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) {
 	int len;
-	int ignore;
-	struct nfq_connection *conn = arg;
-	struct nfq_packet *packet;
-	int wait;
+	int i, j;
+	struct sockaddr_nl sa = { AF_NETLINK };
 
-	for(;;) {
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
-		pthread_mutex_lock(&conn->empty.mutex);
-		for(;;) {
-			if (conn->empty.head != NULL) {
-				packet = conn->empty.head;
-				conn->empty.head = packet->next;
-				if (conn->empty.head == NULL) {
-					conn->empty.last = NULL;
-				}
-				break;
-			}
-			wait = conn->empty.cond;
-			pthread_mutex_unlock(&conn->empty.mutex);
-			if(conn->empty_cb)
-				conn->empty_cb(conn, conn->empty_data);
-			futex_wait(&conn->empty.cond, wait);
-			pthread_mutex_lock(&conn->empty.mutex);
-		}
-		pthread_mutex_unlock(&conn->empty.mutex);
-		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
-		
+
+	if (num == 1) {
 		struct iovec iov;
-		struct sockaddr_nl sa = { AF_NETLINK };
-		struct msghdr msg = { &sa, sizeof(sa), &iov, 1, NULL, 0, 0 };
-		iov.iov_base = packet->buffer;
-		iov.iov_len = packet->len;
+		struct msghdr msg = {&sa, sizeof(sa), &iov, 1, NULL, 0, 0};
+		for(j=0; j<=NFQA_MAX; j++) {
+			packets[0]->attr[j].buffer = NULL;
+			packets[0]->attr[j].len = 0;
+		}
+		packets[0]->error = 0;
+
+		iov.iov_base = packets[0]->buffer;
+		iov.iov_len = packets[0]->len;
 
 		len = recvmsg(conn->fd, &msg, 0);
+
 		if (len == -1)
-			perror("recvmsg wtf");
+			return -errno;
 
-		parse_packet(&msg, packet);
+		parse_packet(&msg, packets[0], len);
 
-		packet->next = NULL;
-
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &ignore);
-		if (packet->error && packet->seq) {
-			pthread_mutex_lock(&conn->error.mutex);
-			if (conn->error.head == NULL) {
-				conn->error.head = packet;
-			}
-			if (conn->error.last != NULL) {
-				conn->error.last->next = packet;
-			}
-			conn->error.last = packet;
-			conn->error.cond++;
-			futex_wake_all(&conn->error.cond);
-			pthread_mutex_unlock(&conn->error.mutex);
-		} else {
-			pthread_mutex_lock(&conn->msg.mutex);
-			if (conn->msg.head == NULL) {
-				conn->msg.head = packet;
-			}
-			if (conn->msg.last != NULL) {
-				conn->msg.last->next = packet;
-			}
-			conn->msg.last = packet;
-			conn->msg.cond++;
-			futex_wake_all(&conn->msg.cond);
-			pthread_mutex_unlock(&conn->msg.mutex);
-		}
-		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &ignore);
+		return 1;
 	}
+
+	struct iovec *iov = alloca(num * sizeof(struct iovec));
+	struct mmsghdr *mmsg = alloca(num * sizeof(struct mmsghdr));
+
+	for(i=0; i<num; i++) {
+		for(j=0; j<=NFQA_MAX; j++) {
+			packets[i]->attr[j].buffer = NULL;
+			packets[i]->attr[j].len = 0;
+		}
+		packets[i]->error = 0;
+	}
+
+	for(i=0; i<num; i++) {
+		iov[i].iov_base = packets[i]->buffer;
+		iov[i].iov_len = packets[i]->len;
+
+		mmsg[i].msg_hdr = (struct msghdr){&sa, sizeof(sa), &iov[i], 1, NULL, 0, 0};
+	}
+
+	len = recvmmsg(conn->fd, mmsg, num, MSG_WAITFORONE, NULL);
+
+	if (len == -1) {
+		return -errno;
+	}
+
+	for(i=0; i<len; i++) {
+		parse_packet(&mmsg[i].msg_hdr, packets[i], mmsg[i].msg_len);
+	}
+	return len;
 }
 
 int init_connection(struct nfq_connection *conn, int flags) {
@@ -305,102 +257,16 @@ int init_connection(struct nfq_connection *conn, int flags) {
 		close(conn->fd);
 		return -1;
 	}
+	int buf = 21299200;
+	setsockopt(conn->fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
+	setsockopt(conn->fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
 
 	conn->seq = 0;
 
-	conn->empty.head = NULL;
-	conn->empty.last = NULL;
-	conn->msg.head = NULL;
-	conn->msg.last = NULL;
-	conn->error.head = NULL;
-	conn->error.last = NULL;
-
-	pthread_mutex_init(&conn->empty.mutex,  NULL);
-	conn->empty.cond = 0;
-	pthread_mutex_init(&conn->msg.mutex,  NULL);
-	conn->msg.cond = 0;
-	pthread_mutex_init(&conn->error.mutex,  NULL);
-	conn->error.cond = 0;
-
-	if (pthread_create(&conn->processing, NULL, process, conn)) {
-		close(conn->fd);
-		return -1;
-	}
 	return 0;
 }
 
-void set_empty_cb(struct nfq_connection *conn,
-		void (*cb)(struct nfq_connection*, void*), void *data) {
-	conn->empty_cb = cb;
-	conn->empty_data = data;
-}
-
-
 void close_connection(struct nfq_connection *conn) {
-	pthread_cancel(conn->processing);
-	pthread_join(conn->processing, NULL);
-
 	close(conn->fd);
-
-	pthread_mutex_destroy(&conn->empty.mutex);
-	pthread_mutex_destroy(&conn->msg.mutex);
-	pthread_mutex_destroy(&conn->error.mutex);
-}
-
-int get_packet(struct nfq_connection *conn, struct nfq_packet **packet, int n) {
-	int i;
-	struct nfq_packet *p;
-	int wait;
-
-	pthread_mutex_lock(&conn->msg.mutex);
-	for(;;) {
-		if (conn->msg.head != NULL) {
-			for (p=conn->msg.head, i=0; p && (i<n);
-					p = p->next, i++)
-				packet[i] = p;
-			conn->msg.head = p;
-			if (conn->msg.head == NULL) {
-				conn->msg.last = NULL;
-			}
-			break;
-		}
-		wait = conn->msg.cond;
-		pthread_mutex_unlock(&conn->msg.mutex);
-		if (futex_wait(&conn->msg.cond, wait) == -1 && errno == EINTR)
-			return 0;
-		pthread_mutex_lock(&conn->msg.mutex);
-	}
-	pthread_mutex_unlock(&conn->msg.mutex);
-
-	return i;
-}
-
-void add_empty(struct nfq_connection *conn, struct nfq_packet *packet, int n) {
-	int i,j;
-	for (j=0; j<n; j++) {
-		for(i=0; i<=NFQA_MAX; i++) {
-			packet[j].attr[i].buffer = NULL;
-			packet[j].attr[i].len = 0;
-			packet[j].attr[i].type = i;
-		}
-		packet[j].error = 0;
-		packet[j].seq = 0;
-		if (j == (n - 1))
-			packet[j].next = NULL;
-		else
-			packet[j].next = &packet[j+1];
-	}
-
-	pthread_mutex_lock(&conn->empty.mutex);
-	if (conn->empty.head == NULL) {
-		conn->empty.head = &packet[0];
-	}
-	if (conn->empty.last != NULL) {
-		conn->empty.last->next = &packet[0];
-	}
-	conn->empty.last = &packet[n-1];
-	conn->empty.cond++;
-	futex_wake_all(&conn->empty.cond);
-	pthread_mutex_unlock(&conn->empty.mutex);
 }
 
