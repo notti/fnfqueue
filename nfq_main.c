@@ -106,6 +106,32 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
 }
 
+int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
+		uint32_t mask) {
+	uint32_t f = htonl(flags);
+	uint32_t m = htonl(mask);
+	struct nfq_attr attr[2] = {{
+		&f,
+		sizeof(f),
+		NFQA_CFG_FLAGS
+	},{
+		&m,
+		sizeof(m),
+		NFQA_CFG_MASK
+	}};
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, attr, 2);
+}
+
+int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len) {
+	uint32_t l = htonl(len);
+	struct nfq_attr attr = {
+		&l,
+		sizeof(l),
+		NFQA_CFG_QUEUE_MAXLEN
+	};
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
+}
+
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle) {
 	int n = 1;
@@ -146,6 +172,29 @@ int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		n++;
 	}
 	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n);
+}
+
+int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
+		uint32_t verdict, uint32_t mangle) {
+	int n = 1;
+	struct nfqnl_msg_verdict_hdr verdict_hdr = {
+		htonl(verdict),
+		htonl(packet->id)
+	};
+	struct nfq_attr attr[MANGLE_MAX+1] = {
+	{
+		&verdict_hdr,
+		sizeof(verdict_hdr),
+		NFQA_VERDICT_HDR
+	},
+	};
+	if (mangle & MANGLE_MARK) {
+		attr[n] = packet->attr[NFQA_MARK];
+		attr[n].type = NFQA_MARK;
+		n++;
+	}
+	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT_BATCH, attr,
+			n);
 }
 
 void parse_packet(struct msghdr *msg, struct nfq_packet *packet, ssize_t len) {

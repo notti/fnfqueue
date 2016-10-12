@@ -57,10 +57,11 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode);
-//maxlen
-//flags
-//batch_verdict
-
+int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
+		uint32_t mask);
+int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len);
+int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
+		uint32_t verdict, uint32_t mangle);
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle);
 
