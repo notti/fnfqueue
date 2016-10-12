@@ -22,6 +22,15 @@ MANGLE_CT = lib.MANGLE_CT
 MANGLE_EXP = lib.MANGLE_EXP
 MANGLE_VLAN = lib.MANGLE_VLAN
 
+MAX_PAYLOAD = 0xffff
+
+# FAIL_OPEN  # 0: drop 1: accept on error
+# CONNTRACK  # report conntrack
+# GSO        # support gso
+# UID_GID    # report UID GID of process
+# SECCTX     # report security context
+
+
 class PacketInvalidException(Exception):
     pass
 
@@ -34,17 +43,19 @@ class Packet:
         self.packet = p
         self._conn = conn
         self._mangle = 0
+        self._invalid = False
 
     def mangle(self):
-        self.verdict(ACCEPT, self._mangle)
+        self.accept(self._mangle)
 
-    def accept(self):
-        self.verdict(ACCEPT, 0)
+    def accept(self, mangle=0):
+        self.verdict(ACCEPT, mangle)
 
     def drop(self):
         self.verdict(DROP, 0)
 
     def verdict(self, action, mangle=0):
+        self._is_invalid()
         if mangle & lib.MANGLE_PAYLOAD:
             b = ffi.new("char []", self.cache['payload'])
             self.packet.attr[lib.NFQA_PAYLOAD].buffer = b
@@ -57,10 +68,15 @@ class Packet:
         self._invalidate()
 
     def _invalidate(self):
-        pass #TODO
+        self._invalid = True
+
+    def _is_invalid(self):
+        if self._invalid:
+            raise PacketInvalidException()
 
     @property
     def payload(self):
+        self._is_invalid()
         if 'payload' in self.cache:
             return self.cache['payload']
         if self.packet.attr[lib.NFQA_CAP_LEN].buffer != ffi.NULL:
@@ -73,18 +89,46 @@ class Packet:
 
     @payload.setter
     def payload(self, value):
+        self._is_invalid()
         self.cache['payload'] = value
         self._mangle |= lib.MANGLE_PAYLOAD
 
     @payload.deleter
     def payload(self):
+        self._is_invalid()
         self._mangle &= ~lib.MANGLE_PAYLOAD
         self.cache['payload'] = None
 
-    #TODO: add other attributes
+    @property
+    def hw_protocol(self):
+        self._is_invalid()
+        return self.packet.hw_protocol
+
+    @property
+    def hook(self):
+        self._is_invalid()
+        return self.packet.hook
+
+    #TODO: add attributes:
+    #MARK get set
+    #TIMESTAMP get
+    #IFINDEX_INDEV get
+    #IFINDEX_OUTDEV get
+    #IFINDEX_PHYSINDEV get
+    #IFINDEX_PHYSOUTDEV get
+    #HWADDR get
+    #CT get set
+    #CT_INFO get
+    #CAP_LEN get
+    #SKB_INFO get
+    #EXP set
+    #UID get
+    #GID get
+    #SECCTX get
+    #VLAN get set
+    #L2HDR get
 
 
-#change to context manager!
 class Connection:
     def __init__(self, alloc_size = 10, chunk_size = 10, packet_size = 20*4096): # just a guess for now
         self.alloc_size = alloc_size
@@ -118,8 +162,7 @@ class Connection:
                 #better error handling!
                 self._received.put(OSError(-num, os.strerror(-num)))
                 continue
-            for i in range(num):
-                self._received.put(packets[i])
+            self._received.put(packets[:num])
             free = free[num:]
 
     def _alloc_buffers(self):
@@ -141,25 +184,33 @@ class Connection:
             self._freelock.notify()
 
     def __iter__(self):
-        return self
-
-    def __next__(self):
-        p = self._received.get() # handle errors!
-        if isinstance(p, Exception):
-            raise p
-        if p.error != 0:
-            return Exception('Hmm: {}'.format(p.error))
-        return Packet(self, p)
+        while True:
+            for p in self._received.get():
+                if isinstance(p, Exception):
+                    raise p
+                if p.error != 0:
+                    yield Exception('Hmm: {}'.format(p.error))
+                else:
+                    yield Packet(self, p)
         
     def bind(self, queue):
         ret = lib.bind_queue(self._conn, queue)
         if ret:
-            raise OSError(ret, 'Could not bind queue: ' + os.strerror(ret))
+            raise OSError(ret, os.strerror(ret))
+
+    def unbind(self, queue):
+        ret = lib.unbind_queue(self._conn, queue)
+        if ret:
+            raise OSError(ret, os.strerror(ret))
 
     def set_mode(self, queue, size, mode):
         ret = lib.set_mode(self._conn, queue, size, mode)
         if ret:
-            raise OSError(ret, 'Could not change mode: ' + os.strerror(ret))
+            raise OSError(ret, os.strerror(ret))
+
+    #flags
+    #maxlen
+    #change rcvbuffer
 
     def close(self):
         conn = self._conn

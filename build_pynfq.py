@@ -6,7 +6,8 @@ ffibuilder = FFI()
 ffibuilder.set_source("_pynfq",
     """
     #include "nfq_main.h"
-    """, libraries=["nfq"], library_dirs=['.'])
+    #include "nfq_main.c"
+    """)#, libraries=["nfq"], library_dirs=['.'])
 
 ffibuilder.cdef("""
 #define NF_DROP           ...
@@ -39,9 +40,11 @@ struct nfq_packet {
 	void *buffer;
 	size_t len;
 	int error;
-	uint32_t  seq;
+	uint32_t seq;
 	uint16_t queue_id;
 	uint32_t id;
+	uint16_t hw_protocol;
+	uint8_t hook;
 	struct nfq_attr attr[...];
 	...;
 };
@@ -59,10 +62,11 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		uint8_t mode);
-//maxlen
-//flags
-//batch_verdict
-
+int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
+		uint32_t mask);
+int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len);
+int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
+		uint32_t verdict, uint32_t mangle);
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle);
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num);

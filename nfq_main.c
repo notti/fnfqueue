@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE //we want recvmmsg
+#endif
 #include "nfq_main.h"
 #include <sys/socket.h>
 #include <errno.h>
@@ -36,23 +38,22 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nfgenmsg));
 
-	void *attr_buf = malloc(n * NLA_HDRLEN);
-	struct nlattr *a;
+	struct nlattr *attr_buf = malloc(n * NLA_HDRLEN);
 	struct iovec *iov = malloc((n*3+1)*sizeof(struct iovec));
 
 	iov[0] = (struct iovec){buf, NFQ_BASE_SIZE};
 
 	for(int i=0; i<n; i++) {
-		a = &attr_buf[i * NLA_HDRLEN];
-		a->nla_len = NLA_HDRLEN + attr[i].len;
-		a->nla_type = attr[i].type;
+		attr_buf[i * NLA_HDRLEN].nla_len = NLA_HDRLEN + attr[i].len;
+		attr_buf[i * NLA_HDRLEN].nla_type = attr[i].type;
 		iov[1 + i*3] = (struct iovec){&attr_buf[i*NLA_HDRLEN],
 			NLA_HDRLEN};
 		iov[1 + i*3 + 1] = (struct iovec){attr[i].buffer,
 			attr[i].len};
 		iov[1 + i*3 + 2] = (struct iovec){buf,
-			NLA_ALIGN(a->nla_len) - a->nla_len};
-		nh->nlmsg_len += NLA_ALIGN(a->nla_len);
+			NLA_ALIGN(attr_buf[i * NLA_HDRLEN].nla_len) -
+				attr_buf[i * NLA_HDRLEN].nla_len};
+		nh->nlmsg_len += NLA_ALIGN(attr_buf[i * NLA_HDRLEN].nla_len);
 	}
 
 	struct sockaddr_nl sa = { AF_NETLINK };
