@@ -37,6 +37,8 @@ struct nfq_packet {
 	uint32_t seq;
 	uint16_t queue_id;
 	uint32_t id;
+	uint16_t hw_protocol;
+	uint8_t hook;
 	struct nfq_attr attr[NFQA_MAX + 1];
 };
 

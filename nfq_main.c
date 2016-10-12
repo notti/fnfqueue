@@ -236,6 +236,8 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet, ssize_t len) {
 
 	struct nfqnl_msg_packet_hdr *hdr = packet->attr[NFQA_PACKET_HDR].buffer;
 	packet->id = ntohl(hdr->packet_id);
+	packet->hw_protocol = ntohs(hdr->hw_protocol);
+	packet->hook = hdr->hook;
 }
 
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) {
