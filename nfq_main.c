@@ -1,15 +1,9 @@
-#ifndef _GNU_SOURCE
 #define _GNU_SOURCE //we want recvmmsg
-#endif
 #include "nfq_main.h"
 #include <sys/socket.h>
 #include <errno.h>
 
 #include <alloca.h>
-
-#include <stdlib.h> //remove
-#include <string.h> //remove
-#include <stdio.h> //remove
 
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n) {
@@ -38,8 +32,8 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	};
 	buf_ass += NLMSG_ALIGN(sizeof(struct nfgenmsg));
 
-	struct nlattr *attr_buf = malloc(n * NLA_HDRLEN);
-	struct iovec *iov = malloc((n*3+1)*sizeof(struct iovec));
+	struct nlattr *attr_buf = alloca(n * NLA_HDRLEN);
+	struct iovec *iov = alloca((n*3+1)*sizeof(struct iovec));
 
 	iov[0] = (struct iovec){buf, NFQ_BASE_SIZE};
 
@@ -62,9 +56,6 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	if ((ret = sendmsg(conn->fd, &msg, 0)) == -1) {
 		return ret;
 	}
-
-	free(attr_buf);
-	free(iov);
 
 	return 0;
 }
