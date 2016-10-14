@@ -136,7 +136,7 @@ class Connection:
         self.chunk_size = chunk_size
         self.packet_size = packet_size
         self._conn = ffi.new("struct nfq_connection *");
-        lib.init_connection(self._conn, 0)
+        lib.init_connection(self._conn)
         self._packets = []
         self._buffers = []
         self._free = self._alloc_buffers()

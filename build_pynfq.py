@@ -54,7 +54,7 @@ struct nfq_connection {
 
 int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n);
-int init_connection(struct nfq_connection *conn, int flags);
+int init_connection(struct nfq_connection *conn);
 void close_connection(struct nfq_connection *conn);
 
 int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
