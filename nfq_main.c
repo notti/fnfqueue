@@ -2,10 +2,10 @@
 #include "nfq_main.h"
 #include <sys/socket.h>
 #include <errno.h>
-
+#include <string.h>
 #include <alloca.h>
 
-int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
+ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n) {
 	//Add synchronous version
 	char buf[NFQ_BASE_SIZE];
@@ -56,7 +56,7 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		return -1;
 	}
 
-	return 0;
+	return conn->seq;
 }
 
 int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
@@ -188,38 +188,37 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
 			n);
 }
 
-void parse_packet(struct msghdr *msg, struct nfq_packet *packet, ssize_t len) {
+int parse_packet(struct nfq_packet *packet) {
 	struct nlmsghdr *nh = packet->buffer;
 	struct nfgenmsg *nfg;
 	struct nlattr *attr;
 
 	packet->seq = nh->nlmsg_seq;
 
-	if (msg->msg_flags & MSG_TRUNC) {
-		packet->error = -ENOMEM;
-		return;
+	if (packet->msg_flags & MSG_TRUNC) {
+		return ENOMEM;
 	}
 
 	if (nh->nlmsg_type == NLMSG_ERROR) {
 		struct nlmsgerr *err = NLMSG_DATA(nh);
-		packet->error = err->error;
-		if (packet->error == 0)
-			packet->error = 1;
-		return;
+		if (err->error == 0)
+			return -1;
+		return err->error;
 	}
 
 	if (nh->nlmsg_type != ((NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_PACKET)) {
-		packet->error = -EBADMSG;
-		return;
+		return EBADMSG;
 	}
 
 	nfg = (struct nfgenmsg *) NLMSG_DATA(nh);
 	packet->queue_id = ntohs(nfg->res_id);
 
+	memset(packet->attr, 0, sizeof(struct nfq_attr)*NFQA_MAX);
+
 	for(attr = (struct nlattr *)(NLMSG_DATA(nh) + NLA_ALIGN(sizeof(struct nfgenmsg)));
 			(attr < (struct nlattr*)(nh + nh->nlmsg_len)) &&
 			(attr->nla_len >= sizeof(struct nlattr)) &&
-			(void*)attr < (packet->buffer + len);
+			(void*)attr < (packet->buffer + packet->msg_len);
 			attr = (struct nlattr *)((void *)attr + NLA_ALIGN(attr->nla_len))) {
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].buffer = (void*)attr + NLA_HDRLEN;
 		packet->attr[attr->nla_type & NLA_TYPE_MASK].len = attr->nla_len - NLA_HDRLEN;
@@ -229,22 +228,18 @@ void parse_packet(struct msghdr *msg, struct nfq_packet *packet, ssize_t len) {
 	packet->id = ntohl(hdr->packet_id);
 	packet->hw_protocol = ntohs(hdr->hw_protocol);
 	packet->hook = hdr->hook;
+	return 0;
 }
 
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) {
 	int len;
-	int i, j;
+	int i;
 	struct sockaddr_nl sa = { AF_NETLINK };
 
 
 	if (num == 1) {
 		struct iovec iov;
 		struct msghdr msg = {&sa, sizeof(sa), &iov, 1, NULL, 0, 0};
-		for(j=0; j<=NFQA_MAX; j++) {
-			packets[0]->attr[j].buffer = NULL;
-			packets[0]->attr[j].len = 0;
-		}
-		packets[0]->error = 0;
 
 		iov.iov_base = packets[0]->buffer;
 		iov.iov_len = packets[0]->len;
@@ -254,21 +249,14 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 		if (len == -1)
 			return -1;
 
-		parse_packet(&msg, packets[0], len);
+		packets[0]->msg_flags = msg.msg_flags;
+		packets[0]->msg_len = len;
 
 		return 1;
 	}
 
 	struct iovec *iov = alloca(num * sizeof(struct iovec));
 	struct mmsghdr *mmsg = alloca(num * sizeof(struct mmsghdr));
-
-	for(i=0; i<num; i++) {
-		for(j=0; j<=NFQA_MAX; j++) {
-			packets[i]->attr[j].buffer = NULL;
-			packets[i]->attr[j].len = 0;
-		}
-		packets[i]->error = 0;
-	}
 
 	for(i=0; i<num; i++) {
 		iov[i].iov_base = packets[i]->buffer;
@@ -284,8 +272,10 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 	}
 
 	for(i=0; i<len; i++) {
-		parse_packet(&mmsg[i].msg_hdr, packets[i], mmsg[i].msg_len);
+		packets[i]->msg_flags = mmsg[i].msg_hdr.msg_flags;
+		packets[i]->msg_len = mmsg[i].msg_len;
 	}
+
 	return len;
 }
 

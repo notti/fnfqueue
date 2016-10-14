@@ -38,17 +38,17 @@ struct nfq_attr {
 struct nfq_packet {
 	void *buffer;
 	size_t len;
-	int error;
-	uint32_t seq;
 	uint16_t queue_id;
 	uint32_t id;
 	uint16_t hw_protocol;
 	uint8_t hook;
 	struct nfq_attr attr[...];
+	size_t seq;
 	...;
 };
 
 struct nfq_connection {
+    int fd;
     ...;
 };
 
@@ -69,6 +69,7 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle);
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num);
+int parse_packet(struct nfq_packet *packet);
 """)
 
 if __name__ == "__main__":

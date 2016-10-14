@@ -40,15 +40,14 @@ struct nfq_attr {
 struct nfq_packet {
 	void *buffer;                       /* buffer for storing netlink message */
 	size_t len;                         /* size of buffer */
-	int error;                          /* 0 for no error; -1 for ack; otherwise errno; */
 	uint16_t queue_id;                  /* nfqueue id packet belongs to; DO NOT MODIFY */
 	uint32_t id;                        /* packet id; DO NOT MODIFY */
 	uint16_t hw_protocol;               /* hw protocol id */
 	uint8_t hook;			    /* filter hook id */
 	struct nfq_attr attr[NFQA_MAX + 1]; /* attributes */
+	size_t seq;			    /* sequence number; DO NOT MODIFY */
 
 	// internal flags; DO NOT TOUCH
-	uint32_t seq;			    /* sequence number */
 	int msg_flags;			    /* msg_flags of received packet */
 	unsigned int msg_len;		    /* length of received message */
 };
@@ -89,7 +88,7 @@ void close_connection(struct nfq_connection *conn);
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
-int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
+ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n);
 
 /**
@@ -201,14 +200,25 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
  * @num: number of given packets.
  *
  * Returns number of received packets on success, -1 otherwise. Sets errno.
+ * Packets need to be parsed with parse_packet before they can be used.
  */
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num);
+
+/**
+ * parse_packet - Parse error/attributes from packet and store info in packet
+ * @packet: packet
+ *
+ * Returns 0 on success or errno if packet contains an error. packet->seq can
+ * be used to match the error with the command responsible for causing the
+ * error.
+ */
+int parse_packet(struct nfq_packet *packet);
+
 
 #define NFQ_BASE_SIZE (NLMSG_ALIGN(sizeof(struct nlmsghdr)) + \
 		       NLMSG_ALIGN(sizeof(struct nfgenmsg)))
 
 #define HAS_ATTR(packet, x) (packet->attr[x].buffer != NULL)
-#define IS_ERROR(packet) (packet->error != 0)
 
 
 #endif
