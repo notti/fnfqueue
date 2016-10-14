@@ -6,7 +6,7 @@ ffibuilder = FFI()
 ffibuilder.set_source("_pynfq",
     """
     #include "nfq_main.h"
-    """, sources=["nfq_main.c"])
+    """, sources=["nfq_main.c"], extra_compile_args=["-O3"])
 
 ffibuilder.cdef("""
 #define NF_DROP           ...

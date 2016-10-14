@@ -9,7 +9,6 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		struct nfq_attr *attr, int n) {
 	//Add synchronous version
 	char buf[NFQ_BASE_SIZE];
-	ssize_t ret;
 	void *buf_ass = buf;
 	struct nlmsghdr *nh = buf_ass;
 
@@ -53,8 +52,8 @@ int send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 	struct sockaddr_nl sa = { AF_NETLINK };
 	struct msghdr msg = { &sa, sizeof(sa), iov, 1 + n*3, NULL, 0, 0 };
 
-	if ((ret = sendmsg(conn->fd, &msg, 0)) == -1) {
-		return ret;
+	if (sendmsg(conn->fd, &msg, 0) == -1) {
+		return -1;
 	}
 
 	return 0;
@@ -253,7 +252,7 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 		len = recvmsg(conn->fd, &msg, 0);
 
 		if (len == -1)
-			return -errno;
+			return -1;
 
 		parse_packet(&msg, packets[0], len);
 
@@ -281,7 +280,7 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 	len = recvmmsg(conn->fd, mmsg, num, MSG_WAITFORONE, NULL);
 
 	if (len == -1) {
-		return -errno;
+		return -1;
 	}
 
 	for(i=0; i<len; i++) {
@@ -300,9 +299,6 @@ int init_connection(struct nfq_connection *conn, int flags) {
 		close(conn->fd);
 		return -1;
 	}
-	int buf = 21299200;
-	setsockopt(conn->fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
-	setsockopt(conn->fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
 
 	conn->seq = 0;
 

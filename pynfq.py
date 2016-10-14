@@ -64,7 +64,7 @@ class Packet:
             ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle)
         self._conn.recycle(self.packet)
         if ret:
-            raise OSError(ret, 'Could not set packet verdict: ' + os.strerror(ret))
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
         self._invalidate()
 
     def _invalidate(self):
@@ -158,9 +158,9 @@ class Connection:
                 m = len(free)
             packets[0:len(free)] = free
             num = lib.receive(self._conn, packets, len(free))
-            if num < 0:
+            if num == -1:
                 #better error handling!
-                self._received.put(OSError(-num, os.strerror(-num)))
+                self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
                 continue
             self._received.put(packets[:num])
             free = free[num:]
@@ -196,17 +196,17 @@ class Connection:
     def bind(self, queue):
         ret = lib.bind_queue(self._conn, queue)
         if ret:
-            raise OSError(ret, os.strerror(ret))
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def unbind(self, queue):
         ret = lib.unbind_queue(self._conn, queue)
         if ret:
-            raise OSError(ret, os.strerror(ret))
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def set_mode(self, queue, size, mode):
         ret = lib.set_mode(self._conn, queue, size, mode)
         if ret:
-            raise OSError(ret, os.strerror(ret))
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     #flags
     #maxlen
