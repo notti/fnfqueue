@@ -289,7 +289,7 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 	return len;
 }
 
-int init_connection(struct nfq_connection *conn, int flags) {
+int init_connection(struct nfq_connection *conn) {
 	struct sockaddr_nl sa = { AF_NETLINK };
 
 	if ((conn->fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_NETFILTER)) == -1) {
