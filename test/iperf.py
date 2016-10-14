@@ -14,10 +14,10 @@ while True:
             try:
                 packet.payload = bytes(packet.payload) #IP(packet.payload))
                 packet.mangle()
-            except pynfq.BufferToSmallException:
+            except pynfq.PayloadTruncatedException:
                 packet.drop()
                 print("drop")
-    except OSError:
+    except pynfq.BufferOverflowException:
         print("buffer error")
         pass
 

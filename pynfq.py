@@ -1,6 +1,7 @@
 from _pynfq import ffi, lib
 import threading
 import os
+import errno
 try:
     import Queue as queue
 except:
@@ -35,7 +36,10 @@ MAX_PAYLOAD = 0xffff
 class PacketInvalidException(Exception):
     pass
 
-class BufferToSmallException(Exception):
+class PayloadTruncatedException(Exception):
+    pass
+
+class BufferOverflowException(Exception):
     pass
 
 class Packet:
@@ -64,11 +68,12 @@ class Packet:
         if self._conn._conn is not None:
             ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle)
         self._conn.recycle(self.packet)
-        if ret:
+        if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         self._invalidate()
 
     def _invalidate(self):
+        #FIXME clean packet
         self._invalid = True
 
     def _is_invalid(self):
@@ -80,8 +85,9 @@ class Packet:
         self._is_invalid()
         if 'payload' in self.cache:
             return self.cache['payload']
+         #FIXME: check if there is actually apayload
         if self.packet.attr[lib.NFQA_CAP_LEN].buffer != ffi.NULL:
-            raise BufferToSmallException()
+            raise PayloadTruncatedException()
         #change that to a custom buffer later
         self.cache['payload'] = ffi.unpack(ffi.cast("char *",
                         self.packet.attr[lib.NFQA_PAYLOAD].buffer),
@@ -160,15 +166,18 @@ class Connection:
             packets[0:len(free)] = free
             num = lib.receive(self._conn, packets, len(free))
             if num == -1:
-                #better error handling!
-                self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
-                continue
-            self._received.put(packets[:num])
+                if ffi.errno == errno.ENOBUFS:
+                    self._received.put(BufferOverflowException())
+                    continue
+                else:
+                    #SMELL: be more graceful?
+                    self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
+                    return
+            self._received.put(free[:num])
             free = free[num:]
 
     def _alloc_buffers(self):
         ret = []
-        print(self.alloc_size)
         for i in range(self.alloc_size):
             packet = ffi.new("struct nfq_packet *");
             b = ffi.new("char []", self.packet_size)
@@ -189,24 +198,25 @@ class Connection:
             for p in self._received.get():
                 if isinstance(p, Exception):
                     raise p
-                if p.error != 0:
-                    yield Exception('Hmm: {}'.format(p.error))
+                err = lib.parse_packet(p)
+                if err != 0:
+                    raise Exception('Hmm: {} {} {}'.format(p.seq, err, os.strerror(err)))
                 else:
                     yield Packet(self, p)
         
     def bind(self, queue):
         ret = lib.bind_queue(self._conn, queue)
-        if ret:
+        if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def unbind(self, queue):
         ret = lib.unbind_queue(self._conn, queue)
-        if ret:
+        if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def set_mode(self, queue, size, mode):
         ret = lib.set_mode(self._conn, queue, size, mode)
-        if ret:
+        if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     #flags
