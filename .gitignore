@@ -1,4 +1,5 @@
 *.swp
 *.so
+*.o
 nfq_test
 _*
