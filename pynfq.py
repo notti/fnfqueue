@@ -68,12 +68,14 @@ class Packet:
         if self._conn._conn is not None:
             ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle)
         self._conn.recycle(self.packet)
+        self._invalidate()
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
-        self._invalidate()
 
     def _invalidate(self):
-        #FIXME clean packet
+        del self.cache
+        del self.packet
+        del self._conn
         self._invalid = True
 
     def _is_invalid(self):
