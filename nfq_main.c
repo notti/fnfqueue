@@ -203,7 +203,7 @@ int parse_packet(struct nfq_packet *packet) {
 		struct nlmsgerr *err = NLMSG_DATA(nh);
 		if (err->error == 0)
 			return -1;
-		return err->error;
+		return -err->error;
 	}
 
 	if (nh->nlmsg_type != ((NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_PACKET)) {
