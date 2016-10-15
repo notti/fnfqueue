@@ -3,7 +3,7 @@ from scapy.all import *
 
 queue = 1
 
-conn = pynfq.Connection(200, 100)
+conn = pynfq.Connection()
 
 conn.bind(queue)
 conn.set_mode(queue, 0xffff, pynfq.COPY_PACKET)
