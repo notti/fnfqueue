@@ -2,6 +2,8 @@ from _pynfq import ffi, lib
 import threading
 import os
 import errno
+import collections
+import itertools
 try:
     import Queue as queue
 except:
@@ -139,47 +141,41 @@ class Packet:
 
 
 class Connection:
-    def __init__(self, alloc_size = 10, chunk_size = 10, packet_size = 20*4096): # just a guess for now
+    def __init__(self, alloc_size = 50, chunk_size = 10, packet_size = 20*4096): # just a guess for now
         self.alloc_size = alloc_size
         self.chunk_size = chunk_size
         self.packet_size = packet_size
         self._conn = ffi.new("struct nfq_connection *");
         lib.init_connection(self._conn)
-        self._packets = []
-        self._buffers = []
-        self._free = self._alloc_buffers()
-        self._freelock = threading.Condition()
+        self._buffers = collections.deque()
+        self._packets = collections.deque()
+        self._packet_lock = threading.Lock()
         self._received = queue.Queue()
         self._worker = threading.Thread(target=self._reader, daemon=True)
         self._worker.start()
 
     def _reader(self):
-        m = 0
-        free = []
+        chunk_size = self.chunk_size
+        packets = ffi.new("struct nfq_packet*[]", chunk_size)
         while self._conn is not None:
-            with self._freelock:
-                free.extend(self._free)
-                self._free = []
-            if len(free) < self.chunk_size:
-                free.extend(self._alloc_buffers())
-            if len(free) > m:
-                packets = ffi.new("struct nfq_packet*[]", len(free))
-                m = len(free)
-            packets[0:len(free)] = free
-            num = lib.receive(self._conn, packets, len(free))
+            with self._packet_lock:
+                if len(self._packets) < chunk_size:
+                    self._alloc_buffers()
+                packets[0:chunk_size] = itertools.islice(self._packets, chunk_size)
+            num = lib.receive(self._conn, packets, chunk_size)
             if num == -1:
                 if ffi.errno == errno.ENOBUFS:
                     self._received.put(BufferOverflowException())
                     continue
                 else:
                     #SMELL: be more graceful?
+                    #handle wrong filedescriptor for closeing connection
                     self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
-            self._received.put(free[:num])
-            free = free[num:]
+            with self._packet_lock:
+                self._received.put([self._packets.popleft() for i in range(num)])
 
     def _alloc_buffers(self):
-        ret = []
         for i in range(self.alloc_size):
             packet = ffi.new("struct nfq_packet *");
             b = ffi.new("char []", self.packet_size)
@@ -187,13 +183,10 @@ class Connection:
             packet.buffer = b
             packet.len = self.packet_size
             self._packets.append(packet)
-            ret.append(packet)
-        return ret
 
     def recycle(self, packet):
-        with self._freelock:
-            self._free.append(packet)
-            self._freelock.notify()
+        with self._packet_lock:
+            self._packets.append(packet)
 
     def __iter__(self):
         while True:
