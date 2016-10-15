@@ -3,78 +3,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct buffer {
-	struct nfq_packet *packets;
-	int num;
-	struct buffer *next;
-};
-
-void cb(struct nfq_connection *conn, void *data) {
-	struct buffer *buf = data;
-	int i;
-	printf("queue empty\n");
-	while(buf->next != NULL)
-		buf = buf->next;
-	buf->next = malloc(sizeof(struct buffer));
-	buf = buf->next;
-	buf->packets = malloc(10 * sizeof(struct nfq_packet));
-	buf->num = 10;
-	buf->next = NULL;
-	for(i = 0; i < 10; i++) {
-		buf->packets[i].buffer = malloc(8192);
-		buf->packets[i].len = 8192;
-	}
-	add_empty(conn, buf->packets, 10);
-}
+#include <errno.h>
 
 int main(int argc, char *argv[]) {
 
 	struct nfq_connection conn;
 	struct buffer *buf;
-	struct nfq_packet *packet;
+	struct nfq_packet *packets[10];
 	int i;
+	int num;
 	int id = 1;
+	int res;
 
-	init_connection(&conn, 0);
-	buf = malloc(sizeof(struct buffer));
-	buf->packets = malloc(10 * sizeof(struct nfq_packet));
-	buf->num = 10;
-	buf->next = NULL;
+	init_connection(&conn);
 	for(i = 0; i < 10; i++) {
-		buf->packets[i].buffer = malloc(8192);
-		buf->packets[i].len = 8192;
+		packets[i] = malloc(sizeof(struct nfq_packet));
+		packets[i]->buffer = malloc(20*4096);
+		packets[i]->len = 20*4096;
 	}
-	add_empty(&conn, buf->packets, 10);
-	set_empty_cb(&conn, cb, buf);
 
-	printf("bind: %s\n", strerror(bind_queue(&conn, id)));
-	printf("set_mode: %s\n", strerror(set_mode(&conn, id, 1000, NFQNL_COPY_PACKET)));
-
+	bind_queue(&conn, id);
+	set_mode(&conn, id, 0xffff, NFQNL_COPY_PACKET);
 
 	for(;;) {
-		get_packet(&conn, &packet, 1);
-	//	for (int j=0; j<packet->attr[NFQA_PAYLOAD].len; j++)
-	//		printf(" %02X", ((char *)packet->attr[NFQA_PAYLOAD].buffer)[j] & 0xFF);
-	//	printf("\n");
-		set_verdict(&conn, packet, NF_ACCEPT, MANGLE_PAYLOAD);
-		add_empty(&conn, packet, 1);
+		num = receive(&conn, packets, 10);
+		if(num == -1) {
+			perror("Receive failed");
+		}
+		for(i=0; i<num; i++) {
+			res = parse_packet(packets[i]);
+			if (res == 0)
+				set_verdict(&conn, packets[i], NF_ACCEPT, MANGLE_PAYLOAD);
+			else {
+				errno = res;
+				perror("error from kernel");
+			}
+		}
 	}
 
 	close_connection(&conn);
-
-	struct buffer *prev = NULL;
-
-	do {
-		if(prev != NULL)
-			free(prev);
-		for(i=0; i<buf->num; i++)
-			free(buf->packets[i].buffer);
-		free(buf->packets);
-		prev = buf;
-		buf = buf->next;
-	} while(buf != NULL);
-	free(prev);
+	for(i = 0; i < 10; i++) {
+		free(packets[i]->buffer);
+		free(packets[i]);
+	}
 
 	return 0;
 }
