@@ -153,6 +153,7 @@ class Connection:
         self._received = queue.Queue()
         self._worker = threading.Thread(target=self._reader, daemon=True)
         self._worker.start()
+        #try custom queue implementation
 
     def _reader(self):
         chunk_size = self.chunk_size
