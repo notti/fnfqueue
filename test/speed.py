@@ -84,23 +84,26 @@ writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
 
 writer.writeheader()
 sys.stdout.flush()
-p = ["-c", "100"]
-writer.writerow(do_one('', 0, 0, p))
-sys.stdout.flush()
-for i in range(1,10):
-    writer.writerow(do_one('py', 50, i, p))
+if len(sys.argv) == 1:
+    p = ["-c", "100"]
+    writer.writerow(do_one('', 0, 0, p))
     sys.stdout.flush()
-    writer.writerow(do_one('C', 0, i, p))
-    sys.stdout.flush()
-
-p = ["-f", "-c", "10000"]
-writer.writerow(do_one('', 0, 0, p))
-sys.stdout.flush()
-for j in range(1,100):
-    writer.writerow(do_one('C', 0, j, p))
-    sys.stdout.flush()
-    for i in range(10,2000,10):
-        if i<j:
-            continue
-        writer.writerow(do_one('py', i, j, p))
+    for i in range(1,10):
+        writer.writerow(do_one('py', 50, i, p))
         sys.stdout.flush()
+        writer.writerow(do_one('C', 0, i, p))
+        sys.stdout.flush()
+
+    p = ["-f", "-c", "10000"]
+    writer.writerow(do_one('', 0, 0, p))
+    sys.stdout.flush()
+    for j in range(1,100):
+        writer.writerow(do_one('C', 0, j, p))
+        sys.stdout.flush()
+        for i in range(10,2000,10):
+            if i<j:
+                continue
+            writer.writerow(do_one('py', i, j, p))
+            sys.stdout.flush()
+else:
+    writer.writerow(do_one(*sys.argv[1:4], sys.argv[4:]))
