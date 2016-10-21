@@ -140,7 +140,7 @@ class Packet:
     #L2HDR get
 
 
-class PacketErrorQueue:
+class _PacketErrorQueue:
     def __init__(self):
         self._packet_queue = collections.deque()
         self._packet_cond = threading.Condition()
@@ -181,7 +181,7 @@ class Connection:
         self._buffers = collections.deque()
         self._packets = collections.deque()
         self._packet_lock = threading.Lock()
-        self._received = PacketErrorQueue()
+        self._received = _PacketErrorQueue()
         self._worker = threading.Thread(target=self._reader)
         self._worker.daemon = True
         self._worker.start()
