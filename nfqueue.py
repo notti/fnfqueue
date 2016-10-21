@@ -140,6 +140,36 @@ class Packet:
     #L2HDR get
 
 
+class PacketErrorQueue:
+    def __init__(self):
+        self._packet_queue = collections.deque()
+        self._packet_cond = threading.Condition()
+        self._error_queue = {}
+        self._error_cond = threading.Condition()
+
+    def append(self, packets):
+        with self._packet_cond:
+            self._packet_queue.extend((p for p in packets if p.seq == 0))
+            if len(self._packet_queue):
+                self._packet_cond.notify()
+        with self._error_cond:
+            self._error_queue.update({p.seq:p for p in packets if p.seq != 0})
+            if len(self._error_queue):
+                self._error_cond.notify_all()
+
+    def get_packet(self):
+        with self._packet_cond:
+            while not len(self._packet_queue):
+                self._packet_cond.wait()
+            return self._packet_queue.popleft()
+
+    def get_error(self, seq):
+        with self._error_cond:
+            while not seq in self._error_queue:
+                self._error_cond.wait()
+            return self._error_queue.pop(seq)
+
+
 class Connection:
     def __init__(self, alloc_size = 50, chunk_size = 10, packet_size = 20*4096): # just a guess for now
         self.alloc_size = alloc_size
@@ -151,11 +181,11 @@ class Connection:
         self._buffers = collections.deque()
         self._packets = collections.deque()
         self._packet_lock = threading.Lock()
-        self._received = queue.Queue()
+        self._received = PacketErrorQueue()
         self._worker = threading.Thread(target=self._reader)
         self._worker.daemon = True
         self._worker.start()
-        #try custom queue implementation
+        self._seq = itertools.count(1)
 
     def _reader(self):
         chunk_size = self.chunk_size
@@ -176,8 +206,7 @@ class Connection:
                     self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
             with self._packet_lock:
-                for i in range(num):
-                    self._received.put(self._packets.popleft())
+                self._received.append([self._packets.popleft() for i in range(num)])
 
     def _alloc_buffers(self):
         for i in range(self.alloc_size):
@@ -194,31 +223,35 @@ class Connection:
 
     def __iter__(self):
         while True:
-            p = self._received.get()
+            p = self._received.get_packet()
             if isinstance(p, Exception):
                 raise p
-            if isinstance(p, Packet):
-                yield p
             err = lib.parse_packet(p)
             if err != 0:
+                #this can only be result of set_verdict
                 raise Exception('Hmm: {} {} {}'.format(p.seq, err, os.strerror(err)))
             else:
                 yield Packet(self, p)
+
+    def __call(self, fun, *args):
+        seq = next(self._seq)
+        if fun(*args, 1, seq) == -1:
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
+        err = lib.parse_packet(self._received.get_error(seq))
+        if err == -1: #ACK
+            return
+        if err == 0: #WTF
+            raise Exception('Something went really wrong!')
+        raise OSError(err, os.strerror(err))
         
     def bind(self, queue):
-        ret = lib.bind_queue(self._conn, queue, 0, 0)
-        if ret == -1:
-            raise OSError(ffi.errno, os.strerror(ffi.errno))
+        self.__call(lib.bind_queue, self._conn, queue)
 
     def unbind(self, queue):
-        ret = lib.unbind_queue(self._conn, queue, 0, 0)
-        if ret == -1:
-            raise OSError(ffi.errno, os.strerror(ffi.errno))
+        self.__call(lib.unbind_queue, self._conn, queue)
 
     def set_mode(self, queue, size, mode):
-        ret = lib.set_mode(self._conn, queue, size, mode, 0, 0)
-        if ret == -1:
-            raise OSError(ffi.errno, os.strerror(ffi.errno))
+        self.__call(lib.set_mode, self._conn, queue, size, mode)
 
     #flags
     #maxlen
