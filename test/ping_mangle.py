@@ -1,12 +1,12 @@
-import pynfq
+import nfqueue
 from scapy.all import *
 
 queue = 1
 
-conn = pynfq.Connection()
+conn = nfqueue.Connection()
 
 conn.bind(queue)
-conn.set_mode(queue, 1000, pynfq.COPY_PACKET)
+conn.set_mode(queue, 1000, nfqueue.COPY_PACKET)
 
 for packet in conn:
     x = IP(packet.payload)
