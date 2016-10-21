@@ -145,7 +145,7 @@ class Connection:
         self.alloc_size = alloc_size
         self.chunk_size = chunk_size
         self.packet_size = packet_size
-        self._conn = ffi.new("struct nfq_connection *");
+        self._conn = ffi.new("struct nfq_connection *")
         if lib.init_connection(self._conn) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         self._buffers = collections.deque()
@@ -181,7 +181,7 @@ class Connection:
 
     def _alloc_buffers(self):
         for i in range(self.alloc_size):
-            packet = ffi.new("struct nfq_packet *");
+            packet = ffi.new("struct nfq_packet *")
             b = ffi.new("char []", self.packet_size)
             self._buffers.append(b)
             packet.buffer = b
