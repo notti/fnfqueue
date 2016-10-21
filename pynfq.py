@@ -151,7 +151,8 @@ class Connection:
         self._packets = collections.deque()
         self._packet_lock = threading.Lock()
         self._received = queue.Queue()
-        self._worker = threading.Thread(target=self._reader, daemon=True)
+        self._worker = threading.Thread(target=self._reader)
+        self._worker.daemon = True
         self._worker.start()
         #try custom queue implementation
 
@@ -174,7 +175,8 @@ class Connection:
                     self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
             with self._packet_lock:
-                self._received.put([self._packets.popleft() for i in range(num)])
+                for i in range(num):
+                    self._received.put(self._packets.popleft())
 
     def _alloc_buffers(self):
         for i in range(self.alloc_size):
@@ -191,14 +193,16 @@ class Connection:
 
     def __iter__(self):
         while True:
-            for p in self._received.get():
-                if isinstance(p, Exception):
-                    raise p
-                err = lib.parse_packet(p)
-                if err != 0:
-                    raise Exception('Hmm: {} {} {}'.format(p.seq, err, os.strerror(err)))
-                else:
-                    yield Packet(self, p)
+            p = self._received.get()
+            if isinstance(p, Exception):
+                raise p
+            if isinstance(p, Packet):
+                yield p
+            err = lib.parse_packet(p)
+            if err != 0:
+                raise Exception('Hmm: {} {} {}'.format(p.seq, err, os.strerror(err)))
+            else:
+                yield Packet(self, p)
         
     def bind(self, queue):
         ret = lib.bind_queue(self._conn, queue)

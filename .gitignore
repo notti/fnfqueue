@@ -1,5 +1,6 @@
 *.swp
 *.so
 *.o
+*.pyc
 nfq_test
 _*
