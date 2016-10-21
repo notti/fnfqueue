@@ -19,7 +19,7 @@ while True:
             except nfqueue.PayloadTruncatedException:
                 packet.drop()
                 print("drop")
-    except nnfqueue.BufferOverflowException:
+    except nfqueue.BufferOverflowException:
         print("buffer error")
         pass
 
