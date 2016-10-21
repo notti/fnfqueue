@@ -55,7 +55,7 @@ def do(prog, ping):
     return {k:v.decode('ascii') for k, v in ping_re.search(p).groupdict().items()}
 
 def speedtestpy(alloc, chunk):
-    return subprocess.Popen(["python3", "copy.py", alloc, chunk], env={"PYTHONPATH": ".."}, stdout=subprocess.PIPE)
+    return subprocess.Popen(["python3", "nfqueue_copy.py", alloc, chunk], env={"PYTHONPATH": ".."}, stdout=subprocess.PIPE)
 def speedtestC(chunk):
     return subprocess.Popen(["./nfqueue_test", chunk], env={"LD_LIBRARY_PATH": ".."}, stdout=subprocess.PIPE)
 
