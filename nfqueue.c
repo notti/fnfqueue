@@ -6,22 +6,19 @@
 #include <alloca.h>
 
 ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
-		struct nfq_attr *attr, int n) {
-	//Add synchronous version
+		struct nfq_attr *attr, int n, int ack, uint32_t seq) {
 	char buf[NFQ_BASE_SIZE];
 	void *buf_ass = buf;
 	struct nlmsghdr *nh = buf_ass;
 
-	conn->seq++;
-	if (conn->seq == 0)
-		conn->seq = 1;
-
 	*nh = (struct nlmsghdr){
 		.nlmsg_len = NFQ_BASE_SIZE,
 		.nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | type,
-		.nlmsg_flags = NLM_F_REQUEST, // | NLM_F_ACK,
-		.nlmsg_seq = conn->seq,
+		.nlmsg_flags = NLM_F_REQUEST,
+		.nlmsg_seq = seq,
 	};
+	if (ack)
+		nh->nlmsg_flags |= NLM_F_ACK;
 	buf_ass += NLMSG_ALIGN(sizeof(struct nlmsghdr));
 	struct nfgenmsg *nfg = buf_ass;
 	*nfg = (struct nfgenmsg){
@@ -56,10 +53,11 @@ ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 		return -1;
 	}
 
-	return conn->seq;
+	return 0;
 }
 
-int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
+int bind_queue(struct nfq_connection *conn, uint16_t queue_id, int ack,
+		uint32_t seq) {
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_BIND
 	};
@@ -68,10 +66,11 @@ int bind_queue(struct nfq_connection *conn, uint16_t queue_id) {
 		sizeof(cmd),
 		NFQA_CFG_CMD
 	};
-	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1, ack, seq);
 }
 
-int unbind_queue(struct nfq_connection *conn, uint16_t queue_id) {
+int unbind_queue(struct nfq_connection *conn, uint16_t queue_id, int ack,
+		uint32_t seq) {
 	struct nfqnl_msg_config_cmd cmd = {
 		NFQNL_CFG_CMD_UNBIND
 	};
@@ -80,11 +79,11 @@ int unbind_queue(struct nfq_connection *conn, uint16_t queue_id) {
 		sizeof(cmd),
 		NFQA_CFG_CMD
 	};
-	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1, ack, seq);
 }
 
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
-		uint8_t mode) {
+		uint8_t mode, int ack, uint32_t seq) {
 	struct nfqnl_msg_config_params params = {
 		htonl(range),
 		mode
@@ -94,11 +93,11 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
 		sizeof(params),
 		NFQA_CFG_PARAMS
 	};
-	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1, ack, seq);
 }
 
 int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
-		uint32_t mask) {
+		uint32_t mask, int ack, uint32_t seq) {
 	uint32_t f = htonl(flags);
 	uint32_t m = htonl(mask);
 	struct nfq_attr attr[2] = {{
@@ -110,21 +109,22 @@ int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
 		sizeof(m),
 		NFQA_CFG_MASK
 	}};
-	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, attr, 2);
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, attr, 2, ack, seq);
 }
 
-int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len) {
+int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len,
+		int ack, uint32_t seq) {
 	uint32_t l = htonl(len);
 	struct nfq_attr attr = {
 		&l,
 		sizeof(l),
 		NFQA_CFG_QUEUE_MAXLEN
 	};
-	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1);
+	return send_msg(conn, queue_id, NFQNL_MSG_CONFIG, &attr, 1, ack, seq);
 }
 
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
-		uint32_t verdict, uint32_t mangle) {
+		uint32_t verdict, uint32_t mangle, int ack, uint32_t seq) {
 	int n = 1;
 	struct nfqnl_msg_verdict_hdr verdict_hdr = {
 		htonl(verdict),
@@ -162,11 +162,12 @@ int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		attr[n].type = NFQA_VLAN;
 		n++;
 	}
-	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n);
+	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n, ack,
+			seq);
 }
 
 int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
-		uint32_t verdict, uint32_t mangle) {
+		uint32_t verdict, uint32_t mangle, int ack, uint32_t seq) {
 	int n = 1;
 	struct nfqnl_msg_verdict_hdr verdict_hdr = {
 		htonl(verdict),
@@ -185,15 +186,13 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
 		n++;
 	}
 	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT_BATCH, attr,
-			n);
+			n, ack, seq);
 }
 
 int parse_packet(struct nfq_packet *packet) {
 	struct nlmsghdr *nh = packet->buffer;
 	struct nfgenmsg *nfg;
 	struct nlattr *attr;
-
-	packet->seq = nh->nlmsg_seq;
 
 	if (packet->msg_flags & MSG_TRUNC) {
 		return ENOMEM;
@@ -254,6 +253,7 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 	for(i=0; i<len; i++) {
 		packets[i]->msg_flags = mmsg[i].msg_hdr.msg_flags;
 		packets[i]->msg_len = mmsg[i].msg_len;
+		packets[i]->seq = ((struct nlmsghdr *)packets[i]->buffer)->nlmsg_seq;
 	}
 
 	return len;
@@ -269,9 +269,6 @@ int init_connection(struct nfq_connection *conn) {
 		close(conn->fd);
 		return -1;
 	}
-
-	conn->seq = 0;
-
 	return 0;
 }
 

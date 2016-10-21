@@ -68,7 +68,7 @@ class Packet:
             self.packet.attr[lib.NFQA_PAYLOAD].buffer = b
             self.packet.attr[lib.NFQA_PAYLOAD].len = len(self.cache['payload'])
         if self._conn._conn is not None:
-            ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle)
+            ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle, 0, 0)
         self._conn.recycle(self.packet)
         self._invalidate()
         if ret == -1:
@@ -205,17 +205,17 @@ class Connection:
                 yield Packet(self, p)
         
     def bind(self, queue):
-        ret = lib.bind_queue(self._conn, queue)
+        ret = lib.bind_queue(self._conn, queue, 0, 0)
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def unbind(self, queue):
-        ret = lib.unbind_queue(self._conn, queue)
+        ret = lib.unbind_queue(self._conn, queue, 0, 0)
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
     def set_mode(self, queue, size, mode):
-        ret = lib.set_mode(self._conn, queue, size, mode)
+        ret = lib.set_mode(self._conn, queue, size, mode, 0, 0)
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 

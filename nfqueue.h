@@ -45,7 +45,9 @@ struct nfq_packet {
 	uint16_t hw_protocol;               /* hw protocol id */
 	uint8_t hook;			    /* filter hook id */
 	struct nfq_attr attr[NFQA_MAX + 1]; /* attributes */
-	size_t seq;			    /* sequence number; DO NOT MODIFY */
+	size_t seq;			    /* sequence number;
+					       seq number of command used or 0
+					       if message is from kernel */
 
 	// internal flags; DO NOT TOUCH
 	int msg_flags;			    /* msg_flags of received packet */
@@ -54,7 +56,6 @@ struct nfq_packet {
 
 struct nfq_connection {
 	int fd;                             /* file descriptor of netlink socket*/
-	uint32_t seq;                       /* current message sequence number */
 };
 
 /**
@@ -81,6 +82,8 @@ void close_connection(struct nfq_connection *conn);
  * @type: message type
  * @attr: array of attributes to send
  * @n: number of attributes to send
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Look at bind_queue, unbind_queue, set_mode, set_flags, set_maxlen,
@@ -89,29 +92,35 @@ void close_connection(struct nfq_connection *conn);
  * caused by the message in the kernel need to be received with receive.
  */
 ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
-		struct nfq_attr *attr, int n);
+		struct nfq_attr *attr, int n, int ack, uint32_t seq);
 
 /**
  * bind_queue - bind to specific queue
  * @conn: netlink connection
  * @queue_id: id to bind to
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
-int bind_queue(struct nfq_connection *conn, uint16_t queue_id);
+int bind_queue(struct nfq_connection *conn, uint16_t queue_id, int ack,
+		uint32_t seq);
 
 /**
  * unbind_queue - unbind from specific queue
  * @conn: netlink connection
  * @queue_id: id to unbind from
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
-int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
+int unbind_queue(struct nfq_connection *conn, uint16_t queue_id, int ack,
+		uint32_t seq);
 
 /**
  * set_mode - set copy mode and range for queue
@@ -124,13 +133,15 @@ int unbind_queue(struct nfq_connection *conn, uint16_t queue_id);
  *     anything (default).
  *  NFQNL_COPY_META: Omits payload.
  *  NFQNL_COPY_PACKET: Copies everything.
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
 int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
-		uint8_t mode);
+		uint8_t mode, int ack, uint32_t seq);
 
 /**
  * set_flags - set queue flags
@@ -138,13 +149,15 @@ int set_mode(struct nfq_connection *conn, uint16_t queue_id, uint32_t range,
  * @queue_id: queue id
  * @flags: queue flags |= flags
  * @mask: queue flags &= mask
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
 int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
-		uint32_t mask);
+		uint32_t mask, int ack, uint32_t seq);
 
 /**
  * set_maxlen - sets maximum number of packets waiting for verdict (=enqueued in
@@ -152,12 +165,15 @@ int set_flags(struct nfq_connection *conn, uint16_t queue_id, uint32_t flags,
  * @conn: netlink connection
  * @queue_id: queue id
  * @len: new length
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
-int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len);
+int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len,
+		int ack, uint32_t seq);
 
 /**
  * set_verdict - sets verdict on packet and optionally mangles attributes
@@ -167,13 +183,15 @@ int set_maxlen(struct nfq_connection *conn, uint16_t queue_id, uint32_t len);
  *  NF_REPEAT, or NF_STOP)
  * @mangle: Mask of packet attributes to mangle. Can be any combination of
  *  MANGLE_MARK, MANGLE_PAYLOAD, MANGLE_CT, MANGLE_EXP, or MANGLE_VLAN.
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
 int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
-		uint32_t verdict, uint32_t mangle);
+		uint32_t verdict, uint32_t mangle, int ack, uint32_t seq);
 
 /**
  * set_verdict_batch - sets verdict on all packets with id smaller than packet
@@ -183,13 +201,15 @@ int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
  * @verdict: Netfilter verdict (NF_DROP, NF_ACCEPT, NF_STOLEN, NF_QUEUE,
  *  NF_REPEAT, or NF_STOP)
  * @mangle: Mask of packet attributes to mangle. Can be only MANGLE_MARK.
+ * @ack: request acknowledgement from kernel
+ * @seq: sequence number to use
  *
  * Returns 0 on success, -1 otherwise. Sets errno.
  * Only errors occuring during sending the message are reported. Errors
  * caused by the message in the kernel need to be received with receive.
  */
 int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
-		uint32_t verdict, uint32_t mangle);
+		uint32_t verdict, uint32_t mangle, int ack, uint32_t seq);
 
 /**
  * receive - Receive packets/errors from netfilter queue
@@ -200,7 +220,8 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
  * @num: number of given packets.
  *
  * Returns number of received packets on success, -1 otherwise. Sets errno.
- * Packets need to be parsed with parse_packet before they can be used.
+ * Packets need to be parsed with parse_packet before they can be used. This
+ * function already sets the seq attribute of the packets.
  */
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num);
 

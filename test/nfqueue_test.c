@@ -31,8 +31,8 @@ int main(int argc, char *argv[]) {
 		packets[i]->len = 20*4096;
 	}
 
-	bind_queue(&conn, id);
-	set_mode(&conn, id, 0xffff, NFQNL_COPY_PACKET);
+	bind_queue(&conn, id, 0, 0);
+	set_mode(&conn, id, 0xffff, NFQNL_COPY_PACKET, 0, 0);
 
 	printf("started\n");
 	fflush(stdout);
@@ -45,7 +45,8 @@ int main(int argc, char *argv[]) {
 		for(i=0; i<num; i++) {
 			res = parse_packet(packets[i]);
 			if (res == 0)
-				set_verdict(&conn, packets[i], NF_ACCEPT, MANGLE_PAYLOAD);
+				set_verdict(&conn, packets[i], NF_ACCEPT,
+						MANGLE_PAYLOAD, 0, 0);
 			else {
 				errno = res;
 				perror("error from kernel");
