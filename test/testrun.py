@@ -55,9 +55,9 @@ def do(prog, ping):
     return {k:v.decode('ascii') for k, v in ping_re.search(p).groupdict().items()}
 
 def speedtestpy(alloc, chunk):
-    return subprocess.Popen(["python3", "speedtest.py", alloc, chunk], env={"PYTHONPATH": ".."}, stdout=subprocess.PIPE)
+    return subprocess.Popen(["python3", "copy.py", alloc, chunk], env={"PYTHONPATH": ".."}, stdout=subprocess.PIPE)
 def speedtestC(chunk):
-    return subprocess.Popen(["../nfq_test", chunk], env={"LD_LIBRARY_PATH": ".."}, stdout=subprocess.PIPE)
+    return subprocess.Popen(["./nfqueue_test", chunk], env={"LD_LIBRARY_PATH": ".."}, stdout=subprocess.PIPE)
 
 def do_one(t, alloc, chunk, ping):
     alloc = str(alloc)
@@ -84,26 +84,4 @@ writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
 
 writer.writeheader()
 sys.stdout.flush()
-if len(sys.argv) == 1:
-    p = ["-c", "100"]
-    writer.writerow(do_one('', 0, 0, p))
-    sys.stdout.flush()
-    for i in range(1,10):
-        writer.writerow(do_one('py', 50, i, p))
-        sys.stdout.flush()
-        writer.writerow(do_one('C', 0, i, p))
-        sys.stdout.flush()
-
-    p = ["-f", "-c", "10000"]
-    writer.writerow(do_one('', 0, 0, p))
-    sys.stdout.flush()
-    for j in range(1,100):
-        writer.writerow(do_one('C', 0, j, p))
-        sys.stdout.flush()
-        for i in range(10,2000,10):
-            if i<j:
-                continue
-            writer.writerow(do_one('py', i, j, p))
-            sys.stdout.flush()
-else:
-    writer.writerow(do_one(*sys.argv[1:4], sys.argv[4:]))
+writer.writerow(do_one(*sys.argv[1:4], sys.argv[4:]))
