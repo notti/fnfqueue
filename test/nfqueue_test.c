@@ -1,4 +1,4 @@
-#include "nfq_main.h"
+#include "nfqueue.h"
 
 #include <stdio.h>
 #include <stdlib.h>

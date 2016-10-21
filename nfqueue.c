@@ -1,5 +1,5 @@
 #define _GNU_SOURCE //we want recvmmsg
-#include "nfq_main.h"
+#include "nfqueue.h"
 #include <sys/socket.h>
 #include <errno.h>
 #include <string.h>

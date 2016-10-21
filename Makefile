@@ -1,14 +1,12 @@
 .PHONY: clean
 
-CC=clang
+CFLAGS="-O3"
 
-main: libnfq.so
+main: libnfqueue.so
 
-libnfq.so: nfq_main.c nfq_main.h
-	$(CC) -shared -O3 -fPIC -o libnfq.so nfq_main.c
-
-nfq_test: nfq_test.c libnfq.so nfq_main.h
-	$(CC) -g -L. -lnfq -O3 -o nfq_test nfq_test.c
+libnfqueue.so: CFLAGS+=-fPIC -shared
+libnfqueue.so: nfqueue.c nfqueue.h
+	$(CC) $(CFLAGS) -o libnfq.so nfqueue.so
 
 clean:
-	rm -f nfq_test libnfq.so
+	rm -f libnfqueue.so

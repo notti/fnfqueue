@@ -1,5 +1,5 @@
-#ifndef NFQ_MAIN_H
-#define NFQ_MAIN_H
+#ifndef NFQUEUE_MAIN_H
+#define NFQUEUE_MAIN_H
 
 #include <stdint.h>
 #include <unistd.h>
