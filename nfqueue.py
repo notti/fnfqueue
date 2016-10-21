@@ -146,7 +146,8 @@ class Connection:
         self.chunk_size = chunk_size
         self.packet_size = packet_size
         self._conn = ffi.new("struct nfq_connection *");
-        lib.init_connection(self._conn)
+        if lib.init_connection(self._conn) == -1:
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
         self._buffers = collections.deque()
         self._packets = collections.deque()
         self._packet_lock = threading.Lock()
