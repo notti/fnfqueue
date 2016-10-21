@@ -253,8 +253,10 @@ class Connection:
     def set_mode(self, queue, size, mode):
         self.__call(lib.set_mode, self._conn, queue, size, mode)
 
+    def set_maxlen(self, queue, l):
+        self.__call(lib.set_maxlen, self._conn, queue, l)
+
     #flags
-    #maxlen
     #change rcvbuffer
 
     def close(self):
