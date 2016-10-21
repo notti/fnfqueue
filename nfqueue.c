@@ -235,26 +235,6 @@ int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num) 
 	int len;
 	int i;
 	struct sockaddr_nl sa = { AF_NETLINK };
-
-
-	if (num == 1) {
-		struct iovec iov;
-		struct msghdr msg = {&sa, sizeof(sa), &iov, 1, NULL, 0, 0};
-
-		iov.iov_base = packets[0]->buffer;
-		iov.iov_len = packets[0]->len;
-
-		len = recvmsg(conn->fd, &msg, 0);
-
-		if (len == -1)
-			return -1;
-
-		packets[0]->msg_flags = msg.msg_flags;
-		packets[0]->msg_len = len;
-
-		return 1;
-	}
-
 	struct iovec *iov = alloca(num * sizeof(struct iovec));
 	struct mmsghdr *mmsg = alloca(num * sizeof(struct mmsghdr));
 
