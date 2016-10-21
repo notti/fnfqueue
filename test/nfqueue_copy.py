@@ -6,8 +6,8 @@ queue = 1
 conn = nfqueue.Connection(alloc_size=int(sys.argv[1]), chunk_size=int(sys.argv[2]))
 
 try:
-    conn.bind(queue)
-    conn.set_mode(queue, 0xffff, nfqueue.COPY_PACKET)
+    q = conn.bind(queue)
+    q.set_mode(0xffff, nfqueue.COPY_PACKET)
 except PermissionError:
     print("Access denied; Do I have root rights or the needed capabilities?")
     sys.exit(-1)

@@ -28,13 +28,6 @@ MANGLE_VLAN = lib.MANGLE_VLAN
 
 MAX_PAYLOAD = 0xffff
 
-# FAIL_OPEN  # 0: drop 1: accept on error
-# CONNTRACK  # report conntrack
-# GSO        # support gso
-# UID_GID    # report UID GID of process
-# SECCTX     # report security context
-
-
 class PacketInvalidException(Exception):
     pass
 
@@ -170,11 +163,43 @@ class _PacketErrorQueue:
             return self._error_queue.pop(seq)
 
 
+class Queue:
+    def __init__(self, conn, queue):
+        self._conn = conn
+        self._flags = 0
+        self._queue = queue
+
+    @property
+    def id(self):
+        return self._queue
+
+    def unbind(self):
+        self._conn._call(lib.unbind_queue, self._queue)
+        del self._conn.queues[self._queue]
+
+    def set_mode(self, size, mode):
+        self._conn._call(lib.set_mode, self._queue, size, mode)
+
+    def set_maxlen(self, l):
+        self._conn._call(lib.set_maxlen, self._queue, l)
+
+#flags
+#
+# FAIL_OPEN  # 0: drop 1: accept on error
+# CONNTRACK  # report conntrack
+# GSO        # support gso
+# UID_GID    # report UID GID of process
+# SECCTX     # report security context
+#
+#invalidate
+
+
 class Connection:
     def __init__(self, alloc_size = 50, chunk_size = 10, packet_size = 20*4096): # just a guess for now
         self.alloc_size = alloc_size
         self.chunk_size = chunk_size
         self.packet_size = packet_size
+        self.queue = {}
         self._conn = ffi.new("struct nfq_connection *")
         if lib.init_connection(self._conn) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
@@ -233,9 +258,9 @@ class Connection:
             else:
                 yield Packet(self, p)
 
-    def __call(self, fun, *args):
+    def _call(self, fun, *args):
         seq = next(self._seq)
-        if fun(*args, 1, seq) == -1:
+        if fun(self._conn, *args, 1, seq) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         err = lib.parse_packet(self._received.get_error(seq))
         if err == -1: #ACK
@@ -245,18 +270,10 @@ class Connection:
         raise OSError(err, os.strerror(err))
         
     def bind(self, queue):
-        self.__call(lib.bind_queue, self._conn, queue)
+        self._call(lib.bind_queue, queue)
+        self.queue[queue] = Queue(self, queue)
+        return self.queue[queue]
 
-    def unbind(self, queue):
-        self.__call(lib.unbind_queue, self._conn, queue)
-
-    def set_mode(self, queue, size, mode):
-        self.__call(lib.set_mode, self._conn, queue, size, mode)
-
-    def set_maxlen(self, queue, l):
-        self.__call(lib.set_maxlen, self._conn, queue, l)
-
-    #flags
     #change rcvbuffer
 
     def close(self):
