@@ -162,7 +162,6 @@ class _PacketErrorQueue:
                 self._error_cond.wait()
             return self._error_queue.pop(seq)
 
-
 class Queue:
     def __init__(self, conn, queue):
         self._conn = conn
@@ -183,14 +182,57 @@ class Queue:
     def set_maxlen(self, l):
         self._conn._call(lib.set_maxlen, self._queue, l)
 
-#flags
-#
-# FAIL_OPEN  # 0: drop 1: accept on error
-# CONNTRACK  # report conntrack
-# GSO        # support gso
-# UID_GID    # report UID GID of process
-# SECCTX     # report security context
-#
+    def _set_flag(self, flag, value):
+        if value:
+            self._flags |= flag
+            self._conn._call(lib.set_flags, self._queue, flag, flag)
+        else:
+            self._flags &= ~flag
+            self._conn._call(lib.set_flags, self._queue, flag, flag)
+
+    def _get_flag(self, flag):
+        return bool(self._flags & flag)
+
+    @property
+    def fail_open(self):
+        return self._get_flag(lib.NFQA_CFG_F_FAIL_OPEN)
+
+    @fail_open.setter
+    def fail_open(self, value):
+        self._set_flag(lib.NFQA_CFG_F_FAIL_OPEN, value)
+
+    @property
+    def conntrack(self):
+        return self._get_flag(lib.NFQA_CFG_F_CONNTRACK)
+
+    @conntrack.setter
+    def conntrack(self, value):
+        self._set_flag(lib.NFQA_CFG_F_CONNTRACK, value)
+
+    @property
+    def gso(self):
+        return self._get_flag(lib.NFQA_CFG_F_GSO)
+
+    @gso.setter
+    def gso(self, value):
+        self._set_flag(lib.NFQA_CFG_F_GSO, value)
+
+    @property
+    def uid_gid(self):
+        return self._get_flag(lib.NFQA_CFG_F_UID_GID)
+
+    @uid_gid.setter
+    def uid_gid(self, value):
+        return self._set_flag(lib.NFQA_CFG_F_UID_GID, value)
+
+    @property
+    def secctx(self):
+        return self._get_flag(lib.NFQA_CFG_F_SECCTX)
+
+    @secctx.setter
+    def secctx(self, value):
+        self._set_flag(lib.NFQA_CFG_F_SECCTX, value)
+
 #invalidate
 
 
