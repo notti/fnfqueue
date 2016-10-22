@@ -6,10 +6,6 @@ import collections
 import itertools
 import socket
 import datetime
-try:
-    import Queue as queue
-except:
-    import queue
 
 COPY_NONE = lib.NFQNL_COPY_NONE
 COPY_META = lib.NFQNL_COPY_META
