@@ -352,7 +352,8 @@ class Connection:
 
     def _call(self, fun, *args):
         seq = next(self._seq)
-        if fun(self._conn, *args, 1, seq) == -1:
+        args += (1, seq)
+        if fun(self._conn, *args) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         err = lib.parse_packet(self._received.get_error(seq))
         if err == -1: #ACK
