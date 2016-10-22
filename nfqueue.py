@@ -4,6 +4,7 @@ import os
 import errno
 import collections
 import itertools
+import socket
 try:
     import Queue as queue
 except:
@@ -35,6 +36,9 @@ class PayloadTruncatedException(Exception):
     pass
 
 class BufferOverflowException(Exception):
+    pass
+
+class NoSuchAttributeException(KeyError):
     pass
 
 class Packet:
@@ -113,6 +117,28 @@ class Packet:
         self._is_invalid()
         return self.packet.hook
 
+    @property
+    def uid(self):
+        self._is_invalid()
+        if 'uid' in self.cache:
+            return self.cache['uid']
+        if self.packet.attr[lib.NFQA_UID].buffer == ffi.NULL:
+            raise NoSuchAttributeException()
+        self.cache['uid'] = socket.ntohl(ffi.cast("uint32_t *",
+                    self.packet.attr[lib.NFQA_UID].buffer)[0])
+        return self.cache['uid']
+
+    @property
+    def gid(self):
+        self._is_invalid()
+        if 'gid' in self.cache:
+            return self.cache['gid']
+        if self.packet.attr[lib.NFQA_GID].buffer == ffi.NULL:
+            raise NoSuchAttributeException()
+        self.cache['gid'] = socket.ntohl(ffi.cast("uint32_t *",
+                    self.packet.attr[lib.NFQA_GID].buffer)[0])
+        return self.cache['gid']
+
     #TODO: add attributes:
     #MARK get set
     #TIMESTAMP get
@@ -126,8 +152,6 @@ class Packet:
     #CAP_LEN get
     #SKB_INFO get
     #EXP set
-    #UID get
-    #GID get
     #SECCTX get
     #VLAN get set
     #L2HDR get
