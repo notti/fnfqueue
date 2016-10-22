@@ -34,10 +34,12 @@ def test(tester, ping, r, w):
     w = open(w, 'wb')
     subprocess.run(["ip", "link", "set", "dev", "lo", "up"], check=True)
     if tester is not None:
-        subprocess.run(["iptables", "-A", "INPUT", "--dst", "127.0.0.1", "-j", "NFQUEUE", "--queue-num", "1"], check=True)
+        subprocess.run(["iptables", "-A", "INPUT", "--dst", "127.0.0.2", "-j", "NFQUEUE", "--queue-num", "1"], check=True)
         p = tester()
         p.stdout.readline()
-    res = subprocess.run(["ping",] + ping + ["-q", "127.0.0.1"], stdout=subprocess.PIPE)
+        print(open('/proc/net/netfilter/nfnetlink_queue').read())
+    res = subprocess.run(["ping",] + ping + ["-q", "127.0.0.2"], stdout=subprocess.PIPE)
+    print(open('/proc/net/netfilter/nfnetlink_queue').read())
     if tester is not None:
         p.terminate()
     w.write(res.stdout)
