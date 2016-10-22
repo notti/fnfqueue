@@ -17,12 +17,8 @@ print("run", flush=True)
 while True:
     try:
         for packet in conn:
-            try:
-                packet.payload = packet.payload
-                packet.accept(nfqueue.MANGLE_PAYLOAD)
-            except nfqueue.PayloadTruncatedException:
-                packet.drop()
-                print("drop")
+            packet.payload = packet.payload
+            packet.accept(nfqueue.MANGLE_PAYLOAD)
     except nfqueue.BufferOverflowException:
         print("buffer error")
         pass

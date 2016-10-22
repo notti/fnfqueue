@@ -77,6 +77,13 @@ struct nfq_connection {
     ...;
 };
 
+struct nfqnl_msg_packet_timestamp {
+        uint64_t  sec;
+        uint64_t  usec;
+};
+
+uint64_t be64toh(uint64_t big_endian_64bits);
+
 int init_connection(struct nfq_connection *conn);
 void close_connection(struct nfq_connection *conn);
 ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,

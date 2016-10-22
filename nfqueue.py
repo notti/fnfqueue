@@ -5,6 +5,7 @@ import errno
 import collections
 import itertools
 import socket
+import datetime
 try:
     import Queue as queue
 except:
@@ -30,9 +31,6 @@ MANGLE_VLAN = lib.MANGLE_VLAN
 MAX_PAYLOAD = 0xffff
 
 class PacketInvalidException(Exception):
-    pass
-
-class PayloadTruncatedException(Exception):
     pass
 
 class BufferOverflowException(Exception):
@@ -61,9 +59,13 @@ class Packet:
     def verdict(self, action, mangle=0):
         self._is_invalid()
         if mangle & lib.MANGLE_PAYLOAD:
-            b = ffi.new("char []", self.cache['payload'])
-            self.packet.attr[lib.NFQA_PAYLOAD].buffer = b
+            p = ffi.new("char []", self.cache['payload'])
+            self.packet.attr[lib.NFQA_PAYLOAD].buffer = p
             self.packet.attr[lib.NFQA_PAYLOAD].len = len(self.cache['payload'])
+        if mangle & lib.MANGLE_MARK:
+            m = ffi.new("uint32_t *", socket.htonl(self.cache['mark']))
+            self.packet.attr[lib.NFQA_MARK].buffer = m
+            self.packet.attr[lib.NFQA_MARK].len = ffi.sizeof("uint32_t")
         if self._conn._conn is not None:
             ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle, 0, 0)
         self._conn.recycle(self.packet)
@@ -82,18 +84,38 @@ class Packet:
             raise PacketInvalidException()
 
     @property
-    def payload(self):
+    def hw_protocol(self):
         self._is_invalid()
-        if 'payload' in self.cache:
-            return self.cache['payload']
-         #FIXME: check if there is actually apayload
-        if self.packet.attr[lib.NFQA_CAP_LEN].buffer != ffi.NULL:
-            raise PayloadTruncatedException()
-        #change that to a custom buffer later
-        self.cache['payload'] = ffi.unpack(ffi.cast("char *",
+        return self.packet.hw_protocol
+
+    @property
+    def hook(self):
+        self._is_invalid()
+        return self.packet.hook
+
+    def _get_property(self, name, i, converted):
+        self._is_invalid()
+        if name in self.cache:
+            return self.cache[name]
+        if self.packet.attr[i].buffer == ffi.NULL:
+            raise NoSuchAttributeException()
+        self.cache[name] = converted()
+        return self.cache[name]
+
+    def _get_property32(self, name, i):
+        def to32():
+            return socket.ntohl(ffi.cast("uint32_t *",
+                    self.packet.attr[i].buffer)[0])
+        return self._get_property(name, i, to32)
+
+    @property
+    def payload(self):
+        def toString():
+            return ffi.unpack(ffi.cast("char *",
                         self.packet.attr[lib.NFQA_PAYLOAD].buffer),
                         self.packet.attr[lib.NFQA_PAYLOAD].len)
-        return self.cache['payload']
+        return self._get_property('payload', lib.NFQA_PAYLOAD,
+                toString)
 
     @payload.setter
     def payload(self, value):
@@ -108,48 +130,56 @@ class Packet:
         self.cache['payload'] = None
 
     @property
-    def hw_protocol(self):
-        self._is_invalid()
-        return self.packet.hw_protocol
-
-    @property
-    def hook(self):
-        self._is_invalid()
-        return self.packet.hook
-
-    @property
     def uid(self):
-        self._is_invalid()
-        if 'uid' in self.cache:
-            return self.cache['uid']
-        if self.packet.attr[lib.NFQA_UID].buffer == ffi.NULL:
-            raise NoSuchAttributeException()
-        self.cache['uid'] = socket.ntohl(ffi.cast("uint32_t *",
-                    self.packet.attr[lib.NFQA_UID].buffer)[0])
-        return self.cache['uid']
+        return self._get_property32('uid', lib.NFQA_UID)
 
     @property
     def gid(self):
+        return self._get_property32('gid', lib.NFQA_GID)
+
+    @property
+    def mark(self):
+        return self._get_property32('mark', lib.NFQA_MARK)
+
+    @mark.setter
+    def mark(self, value):
         self._is_invalid()
-        if 'gid' in self.cache:
-            return self.cache['gid']
-        if self.packet.attr[lib.NFQA_GID].buffer == ffi.NULL:
-            raise NoSuchAttributeException()
-        self.cache['gid'] = socket.ntohl(ffi.cast("uint32_t *",
-                    self.packet.attr[lib.NFQA_GID].buffer)[0])
-        return self.cache['gid']
+        self.cache['mark'] = value
+        self._mangle |= lib.MANGLE_MARK
+
+    @mark.deleter
+    def mark(self):
+        self._is_invalid()
+        self._mangle &= ~lib.MANGLE_MARK
+        self.cache['mark'] = None
+
+    @property
+    def cap_len(self):
+        return self._get_property32('cap_len', lib.NFQA_CAP_LEN)
+
+    @property
+    def truncated(self):
+        self._is_invalid()
+        return self.packet.attr[lib.NFQA_CAP_LEN].buffer != ffi.NULL
+
+    @property
+    def time(self):
+        def toTime():
+            t = ffi.cast("struct nfqnl_msg_packet_timestamp *",
+                    self.packet.attr[lib.NFQA_TIMESTAMP].buffer)
+            return datetime.datetime.fromtimestamp(
+                    lib.be64toh(t.sec) + lib.be64toh(t.usec)/1e6)
+        return self._get_property('time', lib.NFQA_TIMESTAMP,
+                toTime)
 
     #TODO: add attributes:
-    #MARK get set
-    #TIMESTAMP get
-    #IFINDEX_INDEV get
+    #IFINDEX_INDEV get  add rtnelink to translate index -> dev
     #IFINDEX_OUTDEV get
     #IFINDEX_PHYSINDEV get
     #IFINDEX_PHYSOUTDEV get
     #HWADDR get
     #CT get set
     #CT_INFO get
-    #CAP_LEN get
     #SKB_INFO get
     #EXP set
     #SECCTX get
