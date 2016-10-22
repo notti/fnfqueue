@@ -1,4 +1,4 @@
-from _nfqueue import ffi, lib
+from ._nfqueue import ffi, lib
 import threading
 import os
 import errno

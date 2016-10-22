@@ -1,0 +1,3 @@
+include *.txt
+recursive-include include *.h
+prune test

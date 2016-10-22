@@ -4,3 +4,9 @@
 *.pyc
 nfq_test
 _*
+.eggs
+build
+dist
+tmp
+*.egg-info
+venv_*
