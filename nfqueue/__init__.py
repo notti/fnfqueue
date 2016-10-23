@@ -1,4 +1,63 @@
-"""An abstraction of the netlink nfqueue interface."""
+"""An abstraction of the netlink nfqueue interface.
+
+Packets can be retrieved by opening a Connection, configuring a queue, and
+iterating over the Connection.
+
+Example:
+
+Initialize connection:
+>>> conn = nfqueue.Connection()
+
+Bind to queue id 1 and copy full packet with maximum payload length. If not
+executed with root rights or CAP_NET_ADMIN, a PermissionError (OSError in
+python2 is raised. Additional queue attributes could be set here. E.g.
+the maximum queue length, if you plan on holding back a lot of packets
+(have a look at Queue).
+>>> try:
+...     q = conn.bind(1)
+...     q.set_mode(nfqueue.MAX_PAYLOAD, nfqueue.COPY_PACKET)
+... except PermissionError:
+...     print("Access denied; Need root rights or CAP_NET_ADMIN")
+...
+
+
+Exemplary packet retrieval loop: Loop over packets in conn. This loop just
+copies the payload for speed testing purposes and prints the packet arrival
+time. The payload could be abitrarily modified here (up to a length of 65531
+bytes). Finally the packet is resubmitted to the kernel. After mangle the
+packet is invalid and can no longer be accessed.  In case packets arrive too
+fast at the kernel side, the socket buffer overflows and a
+BufferOverflowException is raised.
+>>> while True:
+...     try:
+...         for packet in conn:
+...             packet.payload = packet.payload
+...             print(packet.time)
+...             packet.mangle()
+...     except nfqueue.BufferOverflowException:
+...         print("buffer error")
+...
+
+Close connection and release resources after being finished.
+>>> conn.close()
+
+
+Additional Notes:
+ - Multiple packets are fetched at the same time from this library. This means,
+   that for arrival time always Packet.time has to be used.
+ - For some reason CTRL+C doesn't work in python2 at the moment.
+ - Connection.close() may keep the resources for some time in the background.
+ - Missing not yet implemented attributes:
+   * IFINDEX_*
+   * HWADDR
+   * CT
+   * CT_INFO
+   * SKB_INFO
+   * EXP
+   * SECCTX
+   * VLAN
+   * L2HDR
+"""
 
 from ._nfqueue import ffi, lib
 import threading
@@ -17,7 +76,6 @@ COPY_PACKET = lib.NFQNL_COPY_PACKET
 
 DROP = lib.NF_DROP
 ACCEPT = lib.NF_ACCEPT
-QUEUE = lib.NF_QUEUE
 REPEAT = lib.NF_REPEAT
 STOP = lib.NF_STOP
 
@@ -78,6 +136,8 @@ class Packet:
     def verdict(self, action, mangle=0):
         """Set the verdict action on the packet and optionally mangle the
         given attribute(s).
+
+        action can be either DROP, ACCEPT, REPEAT, or STOP.
 
         mangle can be a combination (or) of MANGLE_MARK and MANGLE_PAYLOAD.
 
@@ -297,7 +357,8 @@ class Queue:
         self._conn._call(lib.set_mode, self._queue, size, mode)
 
     def set_maxlen(self, l):
-        """Set the maximum number of packets enqueued in the kernel.
+        """Set the maximum number of packets enqueued in the kernel. Defaults
+        to 1024.
 
         This is the maximum number of packets without a verdict. Additional
         packets are either dropped or accepted, if fail_open is set."""
