@@ -45,7 +45,8 @@ Close connection and release resources after being finished.
 Additional Notes:
  - Multiple packets are fetched at the same time from this library. This means,
    that for arrival time always Packet.time has to be used.
- - For some reason CTRL+C doesn't work in python2 at the moment.
+ - For some reason CTRL+C is only handled after a new packet arrives in python
+   2. In python3 this only happens from time to time.
  - Connection.close() may keep the resources for some time in the background.
  - Missing not yet implemented attributes:
    * IFINDEX_*

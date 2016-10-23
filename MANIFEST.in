@@ -1,3 +1,4 @@
 include *.txt
 recursive-include include *.h
+recursive-include examples *.txt *.py
 prune test
