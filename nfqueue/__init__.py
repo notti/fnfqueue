@@ -100,7 +100,7 @@ class NoSuchAttributeException(KeyError):
     'Exception raised by accesing non existent attributes of Packet'
     pass
 
-class Packet:
+class Packet(object):
     """Holds data of a packet received from nfqueue
 
     The packet can be mangled or a verdict be set."""
@@ -302,7 +302,7 @@ class Packet:
     #L2HDR get
 
 
-class _PacketErrorQueue:
+class _PacketErrorQueue(object):
     def __init__(self):
         self._packet_queue = collections.deque()
         self._packet_cond = threading.Condition()
@@ -331,7 +331,7 @@ class _PacketErrorQueue:
                 self._error_cond.wait()
             return self._error_queue.pop(seq)
 
-class Queue:
+class Queue(object):
     def __init__(self, conn, queue):
         self._conn = conn
         self._flags = 0
@@ -435,7 +435,7 @@ class Queue:
 #invalidate
 
 
-class Connection:
+class Connection(object):
     """Create a nfnetlink connection and needed buffers with given buffer settings.
 
     Buffers are allocated in alloc_size steps with a size of packet_size. A
