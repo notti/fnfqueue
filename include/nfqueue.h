@@ -52,7 +52,6 @@
 #if NFQA_MAX < 18
 #define NFQA_CFG_F_SECCTX    -1
 #endif
-#define NFQA_CFG_F_MAX       -1
 
 struct nfq_attr {
 	void *buffer;                       /* pointer to place in packet buffer
