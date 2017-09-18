@@ -33,7 +33,8 @@ ssize_t send_msg(struct nfq_connection *conn, uint16_t id, uint16_t type,
 
 	iov[0] = (struct iovec){buf, NFQ_BASE_SIZE};
 
-	for(int i=0; i<n; i++) {
+	int i;
+	for(i=0; i<n; i++) {
 		attr_buf[i * NLA_HDRLEN].nla_len = NLA_HDRLEN + attr[i].len;
 		attr_buf[i * NLA_HDRLEN].nla_type = attr[i].type;
 		iov[1 + i*3] = (struct iovec){&attr_buf[i*NLA_HDRLEN],
