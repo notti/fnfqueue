@@ -153,16 +153,20 @@ int set_verdict(struct nfq_connection *conn, struct nfq_packet *packet,
 		attr[n].type = NFQA_CT;
 		n++;
 	}
+#if NFQA_MAX >= 15
 	if (mangle & MANGLE_EXP) {
 		attr[n] = packet->attr[NFQA_EXP];
 		attr[n].type = NFQA_EXP;
 		n++;
 	}
+#endif
+#if NFQA_MAX >= 20
 	if (mangle & MANGLE_VLAN) {
 		attr[n] = packet->attr[NFQA_VLAN];
 		attr[n].type = NFQA_VLAN;
 		n++;
 	}
+#endif
 	return send_msg(conn, packet->queue_id, NFQNL_MSG_VERDICT, attr, n, ack,
 			seq);
 }

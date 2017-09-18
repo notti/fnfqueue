@@ -27,6 +27,32 @@
 
 #define MANGLE_MAX     5
 
+// support older kernel versions
+#if NFQA_MAX < 14
+#define NFQA_SKB_INFO           -1
+#endif
+#if NFQA_MAX < 15
+#define NFQA_EXP                -1
+#endif
+#if NFQA_MAX < 17
+#define NFQA_UID                -1
+#define NFQA_GID                -1
+#endif
+#if NFQA_MAX < 18
+#define NFQA_SECCTX             -1
+#endif
+#if NFQA_MAX < 20
+#define NFQA_VLAN               -1
+#define NFQA_L2HDR              -1
+#endif
+
+#if NFQA_MAX < 17
+#define NFQA_CFG_F_UID_GID   -1
+#endif
+#if NFQA_MAX < 18
+#define NFQA_CFG_F_SECCTX    -1
+#endif
+#define NFQA_CFG_F_MAX       -1
 
 struct nfq_attr {
 	void *buffer;                       /* pointer to place in packet buffer
