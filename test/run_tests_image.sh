@@ -4,7 +4,7 @@ set -e
 
 cd /io
 
-pip3 install dist/nfqueue-0.9.tar.gz
+python3 setup.py install
 pip3 install scapy
 
 cd test
