@@ -28,29 +28,58 @@
 #define MANGLE_MAX     5
 
 // support older kernel versions
+#if NFQA_MAX < 12
+#define NFQA_CT			11
+#define NFQA_CT_INFO		12
+#endif
+#if NFQA_MAX < 13
+#define NFQA_CAP_LEN		13
+#endif
 #if NFQA_MAX < 14
-#define NFQA_SKB_INFO           -1
+#define NFQA_SKB_INFO           14
 #endif
 #if NFQA_MAX < 15
-#define NFQA_EXP                -1
+#define NFQA_EXP                15
 #endif
 #if NFQA_MAX < 17
-#define NFQA_UID                -1
-#define NFQA_GID                -1
+#define NFQA_UID                16
+#define NFQA_GID                17
 #endif
 #if NFQA_MAX < 18
-#define NFQA_SECCTX             -1
+#define NFQA_SECCTX             18
 #endif
 #if NFQA_MAX < 20
-#define NFQA_VLAN               -1
-#define NFQA_L2HDR              -1
+#define NFQA_VLAN               19
+#define NFQA_L2HDR              20
 #endif
 
-#if NFQA_MAX < 17
-#define NFQA_CFG_F_UID_GID   -1
+#ifndef NFQA_CFG_F_FAIL_OPEN
+#define NFQA_CFG_F_FAIL_OPEN	(1 << 0)
 #endif
-#if NFQA_MAX < 18
-#define NFQA_CFG_F_SECCTX    -1
+
+#ifndef NFQA_CFG_F_CONNTRACK
+#define NFQA_CFG_F_CONNTRACK    (1 << 1)
+#endif
+
+#ifndef NFQA_CFG_F_GSO
+#define NFQA_CFG_F_GSO          (1 << 2)
+#endif
+
+#ifndef NFQA_CFG_F_UID_GID
+#define NFQA_CFG_F_UID_GID	(1 << 3)
+#endif 
+
+#ifndef NFQA_CFG_F_SECCTX
+#define NFQA_CFG_F_SECCTX	(1 << 4)
+#endif
+
+#ifndef NFQA_CFG_F_MAX
+#define NFQA_CFG_F_MAX          (1 << 5)
+#endif
+
+#if NFQA_CFG_F_MAX < (1 << 5)
+#undef NFQA_CFG_F_MAX
+#define NFQA_CFG_F_MAX          (1 << 5)
 #endif
 
 struct nfq_attr {
