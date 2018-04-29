@@ -5,7 +5,7 @@ import sys
 
 print('flood test: ', end='', flush=True)
 
-mangler = subprocess.Popen(('python3', 'nfqueue_copy.py'), stdout=subprocess.PIPE)
+mangler = subprocess.Popen(('python3', 'copy.py'), stdout=subprocess.PIPE)
 
 mangler.stdout.readline()
 

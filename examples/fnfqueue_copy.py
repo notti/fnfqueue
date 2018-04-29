@@ -1,16 +1,15 @@
-"""Re-set payload from python. Can be used for speed testing. Python 2 version."""
+"""Re-set payload from python. Can be used for speed testing."""
 
-from __future__ import print_function
-import nfqueue
+import fnfqueue
 
 queue = 1
 
-conn = nfqueue.Connection()
+conn = fnfqueue.Connection()
 
 try:
     q = conn.bind(queue)
-    q.set_mode(0xffff, nfqueue.COPY_PACKET)
-except OSError:
+    q.set_mode(0xffff, fnfqueue.COPY_PACKET)
+except PermissionError:
     print("Access denied; Do I have root rights or the needed capabilities?")
     sys.exit(-1)
 
@@ -19,7 +18,7 @@ while True:
         for packet in conn:
             packet.payload = packet.payload
             packet.mangle()
-    except nfqueue.BufferOverflowException:
+    except fnfqueue.BufferOverflowException:
         print("buffer error")
         pass
 

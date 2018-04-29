@@ -1,12 +1,12 @@
-import nfqueue
+import fnfqueue
 import sys
 
 queue = 1
 
-conn = nfqueue.Connection()
+conn = fnfqueue.Connection()
 
 q = conn.bind(queue)
-q.set_mode(0xffff, nfqueue.COPY_PACKET)
+q.set_mode(0xffff, fnfqueue.COPY_PACKET)
 
 print("OK", flush=True)
 
@@ -14,8 +14,8 @@ while True:
     try:
         for packet in conn:
             packet.payload = packet.payload
-            packet.accept(nfqueue.MANGLE_PAYLOAD)
-    except nfqueue.BufferOverflowException:
+            packet.accept(fnfqueue.MANGLE_PAYLOAD)
+    except fnfqueue.BufferOverflowException:
         print("buffer error")
         pass
 

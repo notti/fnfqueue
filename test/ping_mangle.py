@@ -1,12 +1,12 @@
-import nfqueue
+import fnfqueue
 from scapy.all import *
 
 queue = 1
 
-conn = nfqueue.Connection()
+conn = fnfqueue.Connection()
 
 conn.bind(queue)
-conn.queue[queue].set_mode(1000, nfqueue.COPY_PACKET)
+conn.queue[queue].set_mode(1000, fnfqueue.COPY_PACKET)
 
 print('OK', flush=True)
 

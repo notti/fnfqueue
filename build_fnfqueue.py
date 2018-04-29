@@ -3,10 +3,10 @@
 from cffi import FFI
 ffibuilder = FFI()
 
-ffibuilder.set_source("nfqueue._nfqueue",
+ffibuilder.set_source("fnfqueue._fnfqueue",
     """
-    #include "nfqueue.h"
-    """, sources=["src/nfqueue.c"], extra_compile_args=["-O3"], include_dirs=["include"])
+    #include "fnfqueue.h"
+    """, sources=["src/fnfqueue.c"], extra_compile_args=["-O3"], include_dirs=["include"])
 
 ffibuilder.cdef("""
 #define NF_DROP           ...

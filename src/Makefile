@@ -2,11 +2,11 @@
 
 CFLAGS=-O3 -I../include
 
-main: libnfqueue.so
+main: libfnfqueue.so
 
-libnfqueue.so: CFLAGS+=-fPIC -shared
-libnfqueue.so: nfqueue.c ../include/nfqueue.h
-	$(CC) $(CFLAGS) -o libnfqueue.so nfqueue.c
+libfnfqueue.so: CFLAGS+=-fPIC -shared
+libfnfqueue.so: fnfqueue.c ../include/nfqueue.h
+	$(CC) $(CFLAGS) -o libfnfqueue.so fnfqueue.c
 
 clean:
-	rm -f libnfqueue.so
+	rm -f libfnfqueue.so

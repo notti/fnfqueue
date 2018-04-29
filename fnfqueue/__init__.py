@@ -6,7 +6,7 @@ iterating over the Connection.
 Example:
 
 Initialize connection:
->>> conn = nfqueue.Connection()
+>>> conn = fnfqueue.Connection()
 
 Bind to queue id 1 and copy full packet with maximum payload length. If not
 executed with root rights or CAP_NET_ADMIN, a PermissionError (OSError in
@@ -15,7 +15,7 @@ the maximum queue length, if you plan on holding back a lot of packets
 (have a look at Queue).
 >>> try:
 ...     q = conn.bind(1)
-...     q.set_mode(nfqueue.MAX_PAYLOAD, nfqueue.COPY_PACKET)
+...     q.set_mode(fnfqueue.MAX_PAYLOAD, fnfqueue.COPY_PACKET)
 ... except PermissionError:
 ...     print("Access denied; Need root rights or CAP_NET_ADMIN")
 ...
@@ -34,7 +34,7 @@ BufferOverflowException is raised.
 ...             packet.payload = packet.payload
 ...             print(packet.time)
 ...             packet.mangle()
-...     except nfqueue.BufferOverflowException:
+...     except fnfqueue.BufferOverflowException:
 ...         print("buffer error")
 ...
 
@@ -60,7 +60,7 @@ Additional Notes:
    * L2HDR
 """
 
-from ._nfqueue import ffi, lib
+from ._fnfqueue import ffi, lib
 import threading
 import os
 import errno
@@ -101,7 +101,7 @@ class NoSuchAttributeException(KeyError):
     pass
 
 class Packet(object):
-    """Holds data of a packet received from nfqueue
+    """Holds data of a packet received from fnfqueue
 
     The packet can be mangled or a verdict be set."""
     def __init__(self, conn, p):
@@ -343,12 +343,12 @@ class Queue(object):
         return self._queue
 
     def unbind(self):
-        """Unbind from nfqueue queue"""
+        """Unbind from fnfqueue queue"""
         self._conn._call(lib.unbind_queue, self._queue)
         del self._conn.queues[self._queue]
 
     def set_mode(self, size, mode):
-        """Set copy mode and copy size of nfqueue queue.
+        """Set copy mode and copy size of fnfqueue queue.
 
         Maximum size can be MAX_PAYLOAD, which results in a maximum
         possible payload size of 65531. Copy mode can be either
@@ -492,7 +492,7 @@ class Connection(object):
             self._packets.append(packet)
 
     def __iter__(self):
-        """Return an iterator with packets received from nfqueue."""
+        """Return an iterator with packets received from fnfqueue."""
         while True:
             p = self._received.get_packet()
             if isinstance(p, Exception):
@@ -517,7 +517,7 @@ class Connection(object):
         raise OSError(err, os.strerror(err))
 
     def bind(self, queue):
-        """Bind to the the nfqueue id queue."""
+        """Bind to the the fnfqueue id queue."""
         self._call(lib.bind_queue, queue)
         self.queue[queue] = Queue(self, queue)
         return self.queue[queue]

@@ -1,4 +1,4 @@
-nfqueue_add0.py - Adds 0 to icmp payload for testing with ping if mangle worked.
-nfqueue_copy.py - Re-copies the payload for speed testing
+fnfqueue_add0.py - Adds 0 to icmp payload for testing with ping if mangle worked.
+fnfqueue_copy.py - Re-copies the payload for speed testing
 
 .2.py contain python2 versions
