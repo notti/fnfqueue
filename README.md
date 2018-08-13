@@ -20,11 +20,11 @@ iptables -A OUTPUT <filter here> -j NFQUEUE --queue-num 1
 import fnfqueue
 
 queue = 1
-conn = nfqueue.Connection()
+conn = fnfqueue.Connection()
 
 try:
     q = conn.bind(queue)
-    q.set_mode(0xffff, nfqueue.COPY_PACKET)
+    q.set_mode(0xffff, fnfqueue.COPY_PACKET)
 except PermissionError:
     print("Access denied; Do I have root rights or the needed capabilities?")
     sys.exit(-1)
@@ -34,7 +34,7 @@ while True:
         for packet in conn:
             packet.payload = packet.payload # modify the packet here
             packet.mangle()
-    except nfqueue.BufferOverflowException:
+    except fnfqueue.BufferOverflowException:
         print("buffer error")
         pass
 
