@@ -48,6 +48,9 @@ Additional Notes:
  - For some reason CTRL+C is only handled after a new packet arrives in python
    2. In python3 this only happens from time to time.
  - Connection.close() may keep the resources for some time in the background.
+ - If a BufferOverflowException occured, reading packets or setting
+   verdicts/mangling/bind/set_mode will raise BufferOverflowException until
+   reset is called.
  - Missing not yet implemented attributes:
    * IFINDEX_*
    * HWADDR
@@ -308,6 +311,7 @@ class _PacketErrorQueue(object):
         self._packet_cond = threading.Condition()
         self._error_queue = {}
         self._error_cond = threading.Condition()
+        self._exception = None
 
     def append(self, packets):
         with self._packet_cond:
@@ -319,17 +323,35 @@ class _PacketErrorQueue(object):
             if len(self._error_queue):
                 self._error_cond.notify_all()
 
+    def exception(self, e):
+        with self._packet_cond, self._error_cond:
+            self._exception = e
+            self._error_cond.notify_all()
+            self._packet_cond.notify_all()
+
     def get_packet(self):
         with self._packet_cond:
-            while not len(self._packet_queue):
+            while not len(self._packet_queue) and self._exception is None:
                 self._packet_cond.wait()
-            return self._packet_queue.popleft()
+            if self._exception is None:
+                return self._packet_queue.popleft()
+            return self._exception
 
     def get_error(self, seq):
         with self._error_cond:
-            while not seq in self._error_queue:
+            while seq not in self._error_queue and self._exception is None:
                 self._error_cond.wait()
-            return self._error_queue.pop(seq)
+            if self._exception is None:
+                return self._error_queue.pop(seq)
+            return self._exception
+
+    def clear(self):
+        with self._error_cond, self._packet_cond:
+            if isinstance(self._exception, BufferOverflowException):
+                self._exception = None
+                self._error_cond.notify_all()
+                self._packet_cond.notify_all()
+
 
 class Queue(object):
     def __init__(self, conn, queue):
@@ -468,18 +490,18 @@ class Connection(object):
             num = lib.receive(self._conn, packets, chunk_size)
             if num == -1:
                 if ffi.errno == errno.ENOBUFS:
-                    self._received.put(BufferOverflowException())
+                    self._received.exception(BufferOverflowException())
                     continue
                 else:
                     #SMELL: be more graceful?
                     #handle wrong filedescriptor for closeing connection
-                    self._received.put(OSError(ffi.errno, os.strerror(ffi.errno)))
+                    self._received.exception(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
             with self._packet_lock:
                 self._received.append([self._packets.popleft() for i in range(num)])
 
     def _alloc_buffers(self):
-        for i in range(self.alloc_size):
+        for _ in range(self.alloc_size):
             packet = ffi.new("struct nfq_packet *")
             b = ffi.new("char []", self.packet_size)
             self._buffers.append(b)
@@ -509,7 +531,10 @@ class Connection(object):
         args += (1, seq)
         if fun(self._conn, *args) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
-        err = lib.parse_packet(self._received.get_error(seq))
+        res = self._received.get_error(seq)
+        if isinstance(res, Exception):
+            raise res
+        err = lib.parse_packet(res)
         if err == -1: #ACK
             return
         if err == 0: #WTF
@@ -521,6 +546,10 @@ class Connection(object):
         self._call(lib.bind_queue, queue)
         self.queue[queue] = Queue(self, queue)
         return self.queue[queue]
+
+    def reset(self):
+        """Clear overflow exception."""
+        self._received.clear()
 
     #change rcvbuffer
 
