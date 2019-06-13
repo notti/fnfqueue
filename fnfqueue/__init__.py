@@ -575,8 +575,9 @@ class Connection(object):
     def close(self):
         """Close the connection. This can also be called while packets are read,
         which will cause the loop to terminate."""
-        os.close(self._w)
-        conn = self._conn
-        self._conn = None
-        lib.close_connection(conn)
+        if self._conn is not None:
+            os.close(self._w)
+            conn = self._conn
+            self._conn = None
+            lib.close_connection(conn)
 
