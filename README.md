@@ -41,7 +41,7 @@ while True:
         print("buffer error")
         pass
 
-conn.close()
+conn.close() # this can be called concurrently to cancel the above for loop
 ```
 
 Help is provided as python docs.

@@ -38,7 +38,9 @@ BufferOverflowException is raised.
 ...         print("buffer error")
 ...
 
-Close connection and release resources after being finished.
+Close connection and release resources after being finished. This will cause
+reading packets, calling verdict/mangle/bind/set_mode to raise StopIteration.
+Close can be called from anywhere.
 >>> conn.close()
 
 
@@ -47,7 +49,6 @@ Additional Notes:
    that for arrival time always Packet.time has to be used.
  - For some reason CTRL+C is only handled after a new packet arrives in python
    2. In python3 this only happens from time to time.
- - Connection.close() may keep the resources for some time in the background.
  - If a BufferOverflowException occured, reading packets or setting
    verdicts/mangling/bind/set_mode will raise BufferOverflowException until
    reset is called.
@@ -71,6 +72,8 @@ import collections
 import itertools
 import socket
 import datetime
+import fcntl
+import select
 
 __all__ = ['Connection']
 
@@ -352,6 +355,9 @@ class _PacketErrorQueue(object):
                 self._error_cond.notify_all()
                 self._packet_cond.notify_all()
 
+    def stop(self):
+        self.exception(StopIteration())
+
 
 class Queue(object):
     def __init__(self, conn, queue):
@@ -470,6 +476,9 @@ class Connection(object):
         self._conn = ffi.new("struct nfq_connection *")
         if lib.init_connection(self._conn) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
+        flags = fcntl.fcntl(self._conn.fd, fcntl.F_GETFL, 0)
+        fcntl.fcntl(self._conn.fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        self._r, self._w = os.pipe()
         self._buffers = collections.deque()
         self._packets = collections.deque()
         self._packet_lock = threading.Lock()
@@ -489,6 +498,11 @@ class Connection(object):
                 packets[0:chunk_size] = itertools.islice(self._packets, chunk_size)
             num = lib.receive(self._conn, packets, chunk_size)
             if num == -1:
+                if ffi.errno == errno.EAGAIN or ffi.errno == errno.EWOULDBLOCK:
+                    res, _, _ = select.select([self._conn.fd, self._r], [], [])
+                    if self._r not in res:
+                        continue
+                    break
                 if ffi.errno == errno.ENOBUFS:
                     self._received.exception(BufferOverflowException())
                     continue
@@ -499,6 +513,9 @@ class Connection(object):
                     return
             with self._packet_lock:
                 self._received.append([self._packets.popleft() for i in range(num)])
+        # shutdown
+        os.close(self._r)
+        self._received.stop()
 
     def _alloc_buffers(self):
         for _ in range(self.alloc_size):
@@ -554,7 +571,9 @@ class Connection(object):
     #change rcvbuffer
 
     def close(self):
-        """Close the connection"""
+        """Close the connection. This can also be called while packets are read,
+        which will cause the loop to terminate."""
+        os.close(self._w)
         conn = self._conn
         self._conn = None
         lib.close_connection(conn)

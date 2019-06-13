@@ -22,3 +22,4 @@ before_script: cd test
 script:
   - sudo `which python` ping_test.py
   - sudo `which python` flood_test.py short
+  - sudo `which python` close_test.py short
