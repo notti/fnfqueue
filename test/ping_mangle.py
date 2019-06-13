@@ -1,6 +1,11 @@
 from __future__ import print_function
 import fnfqueue
 import dpkt
+import sys
+
+def out(*args, **kwargs):
+    print(*args, **kwargs)
+    sys.stdout.flush()
 
 queue = 1
 
@@ -9,7 +14,7 @@ conn = fnfqueue.Connection()
 conn.bind(queue)
 conn.queue[queue].set_mode(1000, fnfqueue.COPY_PACKET)
 
-print('OK', flush=True)
+out('OK')
 
 for packet in conn:
     ip = dpkt.ip.IP(packet.payload)

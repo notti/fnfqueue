@@ -4,12 +4,16 @@ from __future__ import print_function
 import subprocess
 import sys
 
+def out(*args, **kwargs):
+    print(*args, **kwargs)
+    sys.stdout.flush()
+
 num = '100000'
 
 if len(sys.argv) > 1 and sys.argv[1] == 'short':
     num = '1000'
 
-print('flood test: ', end='', flush=True)
+out('flood test: ', end='')
 
 mangler = subprocess.Popen((sys.executable, 'copyPacket.py'), stdout=subprocess.PIPE)
 
@@ -20,9 +24,9 @@ ping = subprocess.check_output(('ping', '-q', '-f', '-c', '100000', '127.0.0.2')
 mangler.terminate()
  
 if b'0% packet loss' in ping:
-    print('OK', flush=True)
+    out('OK')
     sys.exit(0)
 else:
-    print('FAILED', flush=True)
+    out('FAILED')
     sys.exit(-1)
 

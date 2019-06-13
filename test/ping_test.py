@@ -4,7 +4,11 @@ from __future__ import print_function
 import subprocess
 import sys
 
-print('ping mangle: ', end='', flush=True)
+def out(*args, **kwargs):
+    print(*args, **kwargs)
+    sys.stdout.flush()
+
+out('ping mangle: ', end='')
 
 mangler = subprocess.Popen((sys.executable, 'ping_mangle.py'), stdout=subprocess.PIPE)
 
@@ -15,8 +19,8 @@ ping = subprocess.check_output(('ping', '-c', '1', '127.0.0.2'))
 mangler.terminate()
 
 if b'wrong data byte' in ping:
-    print('OK', flush=True)
+    out('OK')
     sys.exit(0)
 else:
-    print('FAILED', flush=True)
+    out('FAILED')
     sys.exit(-1)
