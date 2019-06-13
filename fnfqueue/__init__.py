@@ -535,6 +535,8 @@ class Connection(object):
         while True:
             p = self._received.get_packet()
             if isinstance(p, Exception):
+                if isinstance(p, StopIteration):
+                    return
                 raise p
             err = lib.parse_packet(p)
             if err != 0:
