@@ -1,0 +1,12 @@
+language: python
+
+install:
+  - pip install dpkt
+  - python setup.py install
+  - sudo iptables -A INPUT -j NFQUEUE -i lo --dst 127.0.0.2 --queue-num 1
+
+before_script: cd test
+
+script:
+  - sudo `which python` ping_test.py
+  - sudo `which python` flood_test.py short

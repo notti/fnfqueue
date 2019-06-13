@@ -3,9 +3,14 @@
 import subprocess
 import sys
 
+num = '100000'
+
+if len(sys.argv) > 1 and sys.argv[1] == 'short':
+    num = '1000'
+
 print('flood test: ', end='', flush=True)
 
-mangler = subprocess.Popen(('python3', 'copy.py'), stdout=subprocess.PIPE)
+mangler = subprocess.Popen((sys.executable, 'copyPacket.py'), stdout=subprocess.PIPE)
 
 mangler.stdout.readline()
 

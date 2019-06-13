@@ -5,7 +5,7 @@ import sys
 
 print('ping mangle: ', end='', flush=True)
 
-mangler = subprocess.Popen(('python3', 'ping_mangle.py'), stdout=subprocess.PIPE)
+mangler = subprocess.Popen((sys.executable, 'ping_mangle.py'), stdout=subprocess.PIPE)
 
 mangler.stdout.readline()
 
