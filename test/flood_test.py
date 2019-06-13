@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+from __future__ import print_function
 import subprocess
 import sys
 
@@ -14,10 +15,11 @@ mangler = subprocess.Popen((sys.executable, 'copyPacket.py'), stdout=subprocess.
 
 mangler.stdout.readline()
 
-ping = subprocess.run(('ping', '-q', '-f', '-c', '100000', '127.0.0.2'), stdout=subprocess.PIPE)
+# run not available in 3.4
+ping = subprocess.check_output(('ping', '-q', '-f', '-c', '100000', '127.0.0.2'))
 mangler.terminate()
  
-if b'0% packet loss' in ping.stdout:
+if b'0% packet loss' in ping:
     print('OK', flush=True)
     sys.exit(0)
 else:
