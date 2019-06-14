@@ -3,6 +3,7 @@ fnfqueue
 
 [![Build Status](https://travis-ci.org/notti/fnfqueue.svg?branch=master)](https://travis-ci.org/notti/fnfqueue)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fnfqueue.svg)](https://pypi.org/project/fnfqueue/)
+[![PyPI - License](https://img.shields.io/pypi/l/fnfqueue.svg)](https://pypi.org/project/fnfqueue/)
 
 Fast netfilter nfqueue python and C interface. Gets the speed from
 - avoiding memory allocation
