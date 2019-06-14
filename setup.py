@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name="fnfqueue",
-    version="1.0",
+    version="1.1",
     setup_requires=["cffi>=1.0.0"],
     packages=["fnfqueue"],
     cffi_modules=["build_fnfqueue.py:ffibuilder"],
@@ -31,8 +31,15 @@ setup(
         "Operating System :: POSIX :: Linux",
 
         "Programming Language :: C",
+        "Programming Language :: Python",
         "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.5",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: Implementation :: PyPy",
 
         "Topic :: Internet",
         "Topic :: Security",
@@ -41,8 +48,4 @@ setup(
 
     ],
     keywords='nfqueue netfilter netlink iptables firewall mangle',
-    project_urls={
-        'Source': 'https://github.com/notti/fnfqueue',
-        'Tracker': 'https://github.com/notti/fnfqueue/issues',
-    }
 )
