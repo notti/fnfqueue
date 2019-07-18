@@ -373,7 +373,7 @@ class Queue(object):
     def unbind(self):
         """Unbind from fnfqueue queue"""
         self._conn._call(lib.unbind_queue, self._queue)
-        del self._conn.queues[self._queue]
+        del self._conn.queue[self._queue]
 
     def set_mode(self, size, mode):
         """Set copy mode and copy size of fnfqueue queue.
