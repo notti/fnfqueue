@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name="fnfqueue",
-    version="1.1.0",
+    version="1.1.1",
     setup_requires=["cffi>=1.0.0"],
     packages=["fnfqueue"],
     cffi_modules=["build_fnfqueue.py:ffibuilder"],
