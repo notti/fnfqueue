@@ -75,7 +75,7 @@ import datetime
 import fcntl
 import select
 
-__all__ = ['Connection']
+__all__ = ["Connection"]
 
 COPY_NONE = lib.NFQNL_COPY_NONE
 COPY_META = lib.NFQNL_COPY_META
@@ -92,24 +92,29 @@ MANGLE_CT = lib.MANGLE_CT
 MANGLE_EXP = lib.MANGLE_EXP
 MANGLE_VLAN = lib.MANGLE_VLAN
 
-MAX_PAYLOAD = 0xffff
+MAX_PAYLOAD = 0xFFFF
+
 
 class PacketInvalidException(Exception):
-    'Exception raised by accessing attributes of invalid Packet'
+    "Exception raised by accessing attributes of invalid Packet"
     pass
+
 
 class BufferOverflowException(Exception):
-    'Exception raised on buffer overflow during next(iter(Connection))'
+    "Exception raised on buffer overflow during next(iter(Connection))"
     pass
 
+
 class NoSuchAttributeException(KeyError):
-    'Exception raised by accesing non existent attributes of Packet'
+    "Exception raised by accesing non existent attributes of Packet"
     pass
+
 
 class Packet(object):
     """Holds data of a packet received from fnfqueue
 
     The packet can be mangled or a verdict be set."""
+
     def __init__(self, conn, p):
         self.cache = {}
         self.packet = p
@@ -152,11 +157,11 @@ class Packet(object):
         in PacketInvalidException."""
         self._is_invalid()
         if mangle & lib.MANGLE_PAYLOAD:
-            p = ffi.new("char []", self.cache['payload'])
+            p = ffi.new("char []", self.cache["payload"])
             self.packet.attr[lib.NFQA_PAYLOAD].buffer = p
-            self.packet.attr[lib.NFQA_PAYLOAD].len = len(self.cache['payload'])
+            self.packet.attr[lib.NFQA_PAYLOAD].len = len(self.cache["payload"])
         if mangle & lib.MANGLE_MARK:
-            m = ffi.new("uint32_t *", socket.htonl(self.cache['mark']))
+            m = ffi.new("uint32_t *", socket.htonl(self.cache["mark"]))
             self.packet.attr[lib.NFQA_MARK].buffer = m
             self.packet.attr[lib.NFQA_MARK].len = ffi.sizeof("uint32_t")
         if self._conn._conn is not None:
@@ -199,8 +204,8 @@ class Packet(object):
 
     def _get_property32(self, name, i):
         def to32():
-            return socket.ntohl(ffi.cast("uint32_t *",
-                    self.packet.attr[i].buffer)[0])
+            return socket.ntohl(ffi.cast("uint32_t *", self.packet.attr[i].buffer)[0])
+
         return self._get_property(name, i, to32)
 
     @property
@@ -213,38 +218,40 @@ class Packet(object):
         implementing a conversion function.
 
         Raises NoSuchAttributeException if packet has no payload."""
+
         def toString():
-            return ffi.unpack(ffi.cast("char *",
-                        self.packet.attr[lib.NFQA_PAYLOAD].buffer),
-                        self.packet.attr[lib.NFQA_PAYLOAD].len)
-        return self._get_property('payload', lib.NFQA_PAYLOAD,
-                toString)
+            return ffi.unpack(
+                ffi.cast("char *", self.packet.attr[lib.NFQA_PAYLOAD].buffer),
+                self.packet.attr[lib.NFQA_PAYLOAD].len,
+            )
+
+        return self._get_property("payload", lib.NFQA_PAYLOAD, toString)
 
     @payload.setter
     def payload(self, value):
         self._is_invalid()
-        self.cache['payload'] = value
+        self.cache["payload"] = value
         self._mangle |= lib.MANGLE_PAYLOAD
 
     @payload.deleter
     def payload(self):
         self._is_invalid()
         self._mangle &= ~lib.MANGLE_PAYLOAD
-        self.cache['payload'] = None
+        self.cache["payload"] = None
 
     @property
     def uid(self):
         """Packet uid. (Get)
 
         Raises NoSuchAttributeException if packet has no uid."""
-        return self._get_property32('uid', lib.NFQA_UID)
+        return self._get_property32("uid", lib.NFQA_UID)
 
     @property
     def gid(self):
         """Packet uid. (Get)
 
         Raises NoSuchAttributeException if packet has no uid."""
-        return self._get_property32('gid', lib.NFQA_GID)
+        return self._get_property32("gid", lib.NFQA_GID)
 
     @property
     def mark(self):
@@ -253,26 +260,26 @@ class Packet(object):
         Set mark needs to be an unsigned integer that fits into 32 bit.
 
         Raises NoSuchAttributeException if packet has no mark."""
-        return self._get_property32('mark', lib.NFQA_MARK)
+        return self._get_property32("mark", lib.NFQA_MARK)
 
     @mark.setter
     def mark(self, value):
         self._is_invalid()
-        self.cache['mark'] = value
+        self.cache["mark"] = value
         self._mangle |= lib.MANGLE_MARK
 
     @mark.deleter
     def mark(self):
         self._is_invalid()
         self._mangle &= ~lib.MANGLE_MARK
-        self.cache['mark'] = None
+        self.cache["mark"] = None
 
     @property
     def cap_len(self):
         """Packet payload length. (Get)
 
         Raises NoSuchAttributeException if packet was not truncated."""
-        return self._get_property32('cap_len', lib.NFQA_CAP_LEN)
+        return self._get_property32("cap_len", lib.NFQA_CAP_LEN)
 
     @property
     def truncated(self):
@@ -285,27 +292,31 @@ class Packet(object):
         """Packet arrival time. (Get)
 
         Raises NoSuchAttributeException if packet does not contain an arrival time."""
-        def toTime():
-            t = ffi.cast("struct nfqnl_msg_packet_timestamp *",
-                    self.packet.attr[lib.NFQA_TIMESTAMP].buffer)
-            return datetime.datetime.fromtimestamp(
-                    lib.be64toh(t.sec) + lib.be64toh(t.usec)/1e6)
-        return self._get_property('time', lib.NFQA_TIMESTAMP,
-                toTime)
 
-    #TODO: add attributes:
-    #IFINDEX_INDEV get  add rtnelink to translate index -> dev
-    #IFINDEX_OUTDEV get
-    #IFINDEX_PHYSINDEV get
-    #IFINDEX_PHYSOUTDEV get
-    #HWADDR get
-    #CT get set
-    #CT_INFO get
-    #SKB_INFO get
-    #EXP set
-    #SECCTX get
-    #VLAN get set
-    #L2HDR get
+        def toTime():
+            t = ffi.cast(
+                "struct nfqnl_msg_packet_timestamp *",
+                self.packet.attr[lib.NFQA_TIMESTAMP].buffer,
+            )
+            return datetime.datetime.fromtimestamp(
+                lib.be64toh(t.sec) + lib.be64toh(t.usec) / 1e6
+            )
+
+        return self._get_property("time", lib.NFQA_TIMESTAMP, toTime)
+
+    # TODO: add attributes:
+    # IFINDEX_INDEV get  add rtnelink to translate index -> dev
+    # IFINDEX_OUTDEV get
+    # IFINDEX_PHYSINDEV get
+    # IFINDEX_PHYSOUTDEV get
+    # HWADDR get
+    # CT get set
+    # CT_INFO get
+    # SKB_INFO get
+    # EXP set
+    # SECCTX get
+    # VLAN get set
+    # L2HDR get
 
 
 class _PacketErrorQueue(object):
@@ -322,7 +333,7 @@ class _PacketErrorQueue(object):
             if len(self._packet_queue):
                 self._packet_cond.notify()
         with self._error_cond:
-            self._error_queue.update({p.seq:p for p in packets if p.seq != 0})
+            self._error_queue.update({p.seq: p for p in packets if p.seq != 0})
             if len(self._error_queue):
                 self._error_cond.notify_all()
 
@@ -460,7 +471,8 @@ class Queue(object):
     def secctx(self, value):
         self._set_flag(lib.NFQA_CFG_F_SECCTX, value)
 
-#invalidate
+
+# invalidate
 
 
 class Connection(object):
@@ -468,7 +480,10 @@ class Connection(object):
 
     Buffers are allocated in alloc_size steps with a size of packet_size. A
     maximum of chunk_size messages is received from the kernel at once."""
-    def __init__(self, alloc_size = 50, chunk_size = 10, packet_size = 20*4096): # just a guess for now
+
+    def __init__(
+        self, alloc_size=50, chunk_size=10, packet_size=20 * 4096
+    ):  # just a guess for now
         self.alloc_size = alloc_size
         self.chunk_size = chunk_size
         self.packet_size = packet_size
@@ -507,8 +522,8 @@ class Connection(object):
                     self._received.exception(BufferOverflowException())
                     continue
                 else:
-                    #SMELL: be more graceful?
-                    #handle wrong filedescriptor for closeing connection
+                    # SMELL: be more graceful?
+                    # handle wrong filedescriptor for closeing connection
                     self._received.exception(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
             with self._packet_lock:
@@ -540,8 +555,8 @@ class Connection(object):
                 raise p
             err = lib.parse_packet(p)
             if err != 0:
-                #this can only be result of set_verdict
-                raise Exception('Hmm: {} {} {}'.format(p.seq, err, os.strerror(err)))
+                # this can only be result of set_verdict
+                raise Exception("Hmm: {} {} {}".format(p.seq, err, os.strerror(err)))
             else:
                 yield Packet(self, p)
 
@@ -554,10 +569,10 @@ class Connection(object):
         if isinstance(res, Exception):
             raise res
         err = lib.parse_packet(res)
-        if err == -1: #ACK
+        if err == -1:  # ACK
             return
-        if err == 0: #WTF
-            raise Exception('Something went really wrong!')
+        if err == 0:  # WTF
+            raise Exception("Something went really wrong!")
         raise OSError(err, os.strerror(err))
 
     def bind(self, queue):
@@ -570,7 +585,7 @@ class Connection(object):
         """Clear overflow exception."""
         self._received.clear()
 
-    #change rcvbuffer
+    # change rcvbuffer
 
     def close(self):
         """Close the connection. This can also be called while packets are read,
@@ -580,4 +595,3 @@ class Connection(object):
             conn = self._conn
             self._conn = None
             lib.close_connection(conn)
-

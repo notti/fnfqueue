@@ -1,6 +1,6 @@
 from setuptools import setup
 
-with open('README.md') as f:
+with open("README.md") as f:
     long_description = f.read()
 
 setup(
@@ -14,22 +14,17 @@ setup(
     author_email="gvormayr@gmail.com",
     description="Fast python library encapsulating the nfqueue netlink interface.",
     long_description=long_description,
-    long_description_content_type='text/markdown',
-    url='https://github.com/notti/fnfqueue',
+    long_description_content_type="text/markdown",
+    url="https://github.com/notti/fnfqueue",
     license="MIT",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
-
         "Environment :: Other Environment",
-
         "Intended Audience :: Developers",
         "Intended Audience :: Telecommunications Industry",
         "Intended Audience :: Information Technology",
-
         "License :: OSI Approved :: MIT License",
-
         "Operating System :: POSIX :: Linux",
-
         "Programming Language :: C",
         "Programming Language :: Python",
         "Programming Language :: Python :: 2",
@@ -40,12 +35,10 @@ setup(
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: Implementation :: PyPy",
-
         "Topic :: Internet",
         "Topic :: Security",
         "Topic :: Software Development :: Libraries",
-        "Topic :: System :: Operating System Kernels :: Linux"
-
+        "Topic :: System :: Operating System Kernels :: Linux",
     ],
-    keywords='nfqueue netfilter netlink iptables firewall mangle',
+    keywords="nfqueue netfilter netlink iptables firewall mangle",
 )

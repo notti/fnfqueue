@@ -1,14 +1,21 @@
 #!/usr/bin/python
-    
+
 from cffi import FFI
+
 ffibuilder = FFI()
 
-ffibuilder.set_source("fnfqueue._fnfqueue",
+ffibuilder.set_source(
+    "fnfqueue._fnfqueue",
     """
     #include "fnfqueue.h"
-    """, sources=["src/fnfqueue.c"], extra_compile_args=["-O3"], include_dirs=["include"])
+    """,
+    sources=["src/fnfqueue.c"],
+    extra_compile_args=["-O3"],
+    include_dirs=["include"],
+)
 
-ffibuilder.cdef("""
+ffibuilder.cdef(
+    """
 #define NF_DROP           ...
 #define NF_ACCEPT         ...
 #define NF_STOLEN         ...
@@ -104,7 +111,8 @@ int set_verdict_batch(struct nfq_connection *conn, struct nfq_packet *packet,
 		uint32_t verdict, uint32_t mangle, int ack, uint32_t seq);
 int receive(struct nfq_connection *conn, struct nfq_packet *packets[], int num);
 int parse_packet(struct nfq_packet *packet);
-""")
+"""
+)
 
 if __name__ == "__main__":
     ffibuilder.compile(verbose=True)

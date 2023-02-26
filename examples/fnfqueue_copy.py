@@ -8,7 +8,7 @@ conn = fnfqueue.Connection()
 
 try:
     q = conn.bind(queue)
-    q.set_mode(0xffff, fnfqueue.COPY_PACKET)
+    q.set_mode(0xFFFF, fnfqueue.COPY_PACKET)
 except PermissionError:
     print("Access denied; Do I have root rights or the needed capabilities?")
     sys.exit(-1)
