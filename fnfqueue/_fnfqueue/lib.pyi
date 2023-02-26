@@ -1,4 +1,4 @@
-from typing import NoReturn
+from typing import List
 from cffi import FFI
 
 MANGLE_CT: int
@@ -42,46 +42,83 @@ NF_REPEAT: int
 NF_STOLEN: int
 NF_STOP: int
 
+class nfq_attr:
+    buffer: FFI.CData
+    len: int
+
+class nfq_packet:
+    buffer: FFI.CData
+    len: int
+    queue_id: int
+    id: int
+    hw_protocol: int
+    hook: int
+    attr: List[nfq_attr]
+    seq: int
+
+class nfq_connection:
+    fd: int
+
+class nfqnl_msg_packet_timestamp:
+    sec: int
+    usec: int
+
 def be64toh(big_endian_64bits: int) -> int: ...
-def init_connection(nfq_connection: FFI.CData) -> int: ...
-def close_connection(nfq_connection: FFI.CData) -> NoReturn: ...
+def init_connection(nfq_connection: nfq_connection) -> int: ...
+def close_connection(nfq_connection: nfq_connection) -> None: ...
 def send_msg(
-    nfq_connection: FFI.CData,
+    nfq_connection: nfq_connection,
     id: int,
     type: int,
-    attr: FFI.CData,
+    attr: List[nfq_attr],
     n: int,
     ack: int,
     seq: int,
 ) -> int: ...
-def bind_queue(nfq_connection: FFI.CData, queue_id: int, ack: int, seq: int) -> int: ...
+def bind_queue(
+    nfq_connection: nfq_connection, queue_id: int, ack: int, seq: int
+) -> int: ...
 def unbind_queue(
-    nfq_connection: FFI.CData, queue_id: int, ack: int, seq: int
+    nfq_connection: nfq_connection, queue_id: int, ack: int, seq: int
 ) -> int: ...
 def set_mode(
-    nfq_connection: FFI.CData, queue_id: int, range: int, mode: int, ack: int, seq: int
+    nfq_connection: nfq_connection,
+    queue_id: int,
+    range: int,
+    mode: int,
+    ack: int,
+    seq: int,
 ) -> int: ...
 def set_flags(
-    nfq_connection: FFI.CData, queue_id: int, flags: int, mask: int, ack: int, seq: int
+    nfq_connection: nfq_connection,
+    queue_id: int,
+    flags: int,
+    mask: int,
+    ack: int,
+    seq: int,
 ) -> int: ...
 def set_maxlen(
-    nfq_connection: FFI.CData, queue_id: int, len: int, ack: int, seq: int
+    nfq_connection: nfq_connection, queue_id: int, len: int, ack: int, seq: int
 ) -> int: ...
 def set_verdict(
-    nfq_connection: FFI.CData,
-    packet: FFI.CData,
+    nfq_connection: nfq_connection,
+    packet: nfq_packet,
     verdict: int,
     mangle: int,
     ack: int,
     seq: int,
 ) -> int: ...
 def set_verdict_batch(
-    nfq_connection: FFI.CData,
-    packet: FFI.CData,
+    nfq_connection: nfq_connection,
+    packet: nfq_packet,
     verdict: int,
     mangle: int,
     ack: int,
     seq: int,
 ) -> int: ...
-def receive(nfq_connection: FFI.CData, packets: FFI.CData, num: int) -> int: ...
-def parse_packet(packet: FFI.CData) -> int: ...
+def receive(
+    nfq_connection: nfq_connection, packets: List[nfq_packet], num: int
+) -> int: ...
+def parse_packet(packet: nfq_packet) -> int: ...
+
+CData = FFI.CData

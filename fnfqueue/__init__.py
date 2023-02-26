@@ -64,7 +64,7 @@ Additional Notes:
    * L2HDR
 """
 
-from ._fnfqueue import ffi, lib
+from ._fnfqueue import ffi, lib  # pyright: reportMissingModuleSource=false
 import threading
 import os
 import errno
@@ -74,6 +74,7 @@ import socket
 import datetime
 import fcntl
 import select
+import typing
 
 __all__ = ["Connection"]
 
@@ -110,26 +111,29 @@ class NoSuchAttributeException(KeyError):
     pass
 
 
+# pyright: reportPrivateUsage=false
+
+
 class Packet(object):
     """Holds data of a packet received from fnfqueue
 
     The packet can be mangled or a verdict be set."""
 
-    def __init__(self, conn, p):
-        self.cache = {}
-        self.packet = p
-        self._conn = conn
-        self._mangle = 0
-        self._invalid = False
+    def __init__(self, conn: "Connection", packet: lib.nfq_packet) -> None:
+        self.cache: dict[str, typing.Any] = {}
+        self.packet: lib.nfq_packet = packet
+        self._conn: Connection = conn
+        self._mangle: int = 0
+        self._invalid: bool = False
 
-    def mangle(self):
+    def mangle(self) -> None:
         """Accept the packet and mangle the modified attribute(s).
 
         After calling this function, using this instance is results
         in PacketInvalidException."""
         self.accept(self._mangle)
 
-    def accept(self, mangle=0):
+    def accept(self, mangle: int = 0) -> None:
         """Accept the packet and optionally mangle the given attributes.
 
         mangle can be a combination (or) of MANGLE_MARK and MANGLE_PAYLOAD.
@@ -138,14 +142,14 @@ class Packet(object):
         in PacketInvalidException."""
         self.verdict(ACCEPT, mangle)
 
-    def drop(self):
+    def drop(self) -> None:
         """Drop the packet.
 
         After calling this function, using this instance is results
         in PacketInvalidException."""
         self.verdict(DROP, 0)
 
-    def verdict(self, action, mangle=0):
+    def verdict(self, action: int, mangle: int = 0) -> None:
         """Set the verdict action on the packet and optionally mangle the
         given attribute(s).
 
@@ -171,29 +175,31 @@ class Packet(object):
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
 
-    def _invalidate(self):
+    def _invalidate(self) -> None:
         del self.cache
         del self.packet
         del self._conn
         self._invalid = True
 
-    def _is_invalid(self):
+    def _is_invalid(self) -> None:
         if self._invalid:
             raise PacketInvalidException()
 
     @property
-    def hw_protocol(self):
+    def hw_protocol(self) -> int:
         """HW protocol id of packet. (Get only)"""
         self._is_invalid()
         return self.packet.hw_protocol
 
     @property
-    def hook(self):
+    def hook(self) -> int:
         """netfilter hook id of packet. (Get only)"""
         self._is_invalid()
         return self.packet.hook
 
-    def _get_property(self, name, i, converted):
+    def _get_property(
+        self, name: str, i: int, converted: typing.Callable[[], typing.Any]
+    ):
         self._is_invalid()
         if name in self.cache:
             return self.cache[name]
@@ -202,14 +208,14 @@ class Packet(object):
         self.cache[name] = converted()
         return self.cache[name]
 
-    def _get_property32(self, name, i):
+    def _get_property32(self, name: str, i: int):
         def to32():
-            return socket.ntohl(ffi.cast("uint32_t *", self.packet.attr[i].buffer)[0])
+            return socket.ntohl(ffi.cast("uint32_t *", self.packet.attr[i].buffer)[0])  # type: ignore
 
         return self._get_property(name, i, to32)
 
     @property
-    def payload(self):
+    def payload(self) -> bytes:
         """Packet payload. (Get and Set)
 
         truncated needs to be checked, if the whole payload was copied.
@@ -228,33 +234,33 @@ class Packet(object):
         return self._get_property("payload", lib.NFQA_PAYLOAD, toString)
 
     @payload.setter
-    def payload(self, value):
+    def payload(self, value: bytes) -> None:
         self._is_invalid()
         self.cache["payload"] = value
         self._mangle |= lib.MANGLE_PAYLOAD
 
     @payload.deleter
-    def payload(self):
+    def payload(self) -> None:
         self._is_invalid()
         self._mangle &= ~lib.MANGLE_PAYLOAD
         self.cache["payload"] = None
 
     @property
-    def uid(self):
+    def uid(self) -> int:
         """Packet uid. (Get)
 
         Raises NoSuchAttributeException if packet has no uid."""
         return self._get_property32("uid", lib.NFQA_UID)
 
     @property
-    def gid(self):
+    def gid(self) -> int:
         """Packet uid. (Get)
 
         Raises NoSuchAttributeException if packet has no uid."""
         return self._get_property32("gid", lib.NFQA_GID)
 
     @property
-    def mark(self):
+    def mark(self) -> int:
         """Packet mark. (Get and Set)
 
         Set mark needs to be an unsigned integer that fits into 32 bit.
@@ -263,41 +269,41 @@ class Packet(object):
         return self._get_property32("mark", lib.NFQA_MARK)
 
     @mark.setter
-    def mark(self, value):
+    def mark(self, value: int) -> None:
         self._is_invalid()
         self.cache["mark"] = value
         self._mangle |= lib.MANGLE_MARK
 
     @mark.deleter
-    def mark(self):
+    def mark(self) -> None:
         self._is_invalid()
         self._mangle &= ~lib.MANGLE_MARK
         self.cache["mark"] = None
 
     @property
-    def cap_len(self):
+    def cap_len(self) -> int:
         """Packet payload length. (Get)
 
         Raises NoSuchAttributeException if packet was not truncated."""
         return self._get_property32("cap_len", lib.NFQA_CAP_LEN)
 
     @property
-    def truncated(self):
+    def truncated(self) -> bool:
         """True if packet payload was truncated. (Get)"""
         self._is_invalid()
-        return self.packet.attr[lib.NFQA_CAP_LEN].buffer != ffi.NULL
+        return self.packet.attr[lib.NFQA_CAP_LEN].buffer is not ffi.NULL
 
     @property
-    def time(self):
+    def time(self) -> datetime.datetime:
         """Packet arrival time. (Get)
 
         Raises NoSuchAttributeException if packet does not contain an arrival time."""
 
         def toTime():
-            t = ffi.cast(
+            t: lib.nfqnl_msg_packet_timestamp = ffi.cast(
                 "struct nfqnl_msg_packet_timestamp *",
                 self.packet.attr[lib.NFQA_TIMESTAMP].buffer,
-            )
+            )  # type: ignore
             return datetime.datetime.fromtimestamp(
                 lib.be64toh(t.sec) + lib.be64toh(t.usec) / 1e6
             )
@@ -320,14 +326,14 @@ class Packet(object):
 
 
 class _PacketErrorQueue(object):
-    def __init__(self):
-        self._packet_queue = collections.deque()
+    def __init__(self) -> None:
+        self._packet_queue: collections.deque[lib.nfq_packet] = collections.deque()
         self._packet_cond = threading.Condition()
-        self._error_queue = {}
+        self._error_queue: typing.Dict[int, lib.nfq_packet] = {}
         self._error_cond = threading.Condition()
-        self._exception = None
+        self._exception: Exception | None = None
 
-    def append(self, packets):
+    def append(self, packets: typing.List[lib.nfq_packet]) -> None:
         with self._packet_cond:
             self._packet_queue.extend((p for p in packets if p.seq == 0))
             if len(self._packet_queue):
@@ -337,13 +343,13 @@ class _PacketErrorQueue(object):
             if len(self._error_queue):
                 self._error_cond.notify_all()
 
-    def exception(self, e):
+    def exception(self, e: Exception) -> None:
         with self._packet_cond, self._error_cond:
             self._exception = e
             self._error_cond.notify_all()
             self._packet_cond.notify_all()
 
-    def get_packet(self):
+    def get_packet(self) -> lib.nfq_packet | Exception:
         with self._packet_cond:
             while not len(self._packet_queue) and self._exception is None:
                 self._packet_cond.wait()
@@ -351,7 +357,7 @@ class _PacketErrorQueue(object):
                 return self._packet_queue.popleft()
             return self._exception
 
-    def get_error(self, seq):
+    def get_error(self, seq: int) -> lib.nfq_packet | Exception:
         with self._error_cond:
             while seq not in self._error_queue and self._exception is None:
                 self._error_cond.wait()
@@ -359,34 +365,34 @@ class _PacketErrorQueue(object):
                 return self._error_queue.pop(seq)
             return self._exception
 
-    def clear(self):
+    def clear(self) -> None:
         with self._error_cond, self._packet_cond:
             if isinstance(self._exception, BufferOverflowException):
                 self._exception = None
                 self._error_cond.notify_all()
                 self._packet_cond.notify_all()
 
-    def stop(self):
+    def stop(self) -> None:
         self.exception(StopIteration())
 
 
 class Queue(object):
-    def __init__(self, conn, queue):
+    def __init__(self, conn: "Connection", queue: int) -> None:
         self._conn = conn
         self._flags = 0
         self._queue = queue
 
     @property
-    def id(self):
+    def id(self) -> int:
         """queue id"""
         return self._queue
 
-    def unbind(self):
+    def unbind(self) -> None:
         """Unbind from fnfqueue queue"""
         self._conn._call(lib.unbind_queue, self._queue)
         del self._conn.queue[self._queue]
 
-    def set_mode(self, size, mode):
+    def set_mode(self, size: int, mode: int) -> None:
         """Set copy mode and copy size of fnfqueue queue.
 
         Maximum size can be MAX_PAYLOAD, which results in a maximum
@@ -396,7 +402,7 @@ class Queue(object):
         which results in full packets."""
         self._conn._call(lib.set_mode, self._queue, size, mode)
 
-    def set_maxlen(self, l):
+    def set_maxlen(self, l: int) -> None:
         """Set the maximum number of packets enqueued in the kernel. Defaults
         to 1024.
 
@@ -404,7 +410,7 @@ class Queue(object):
         packets are either dropped or accepted, if fail_open is set."""
         self._conn._call(lib.set_maxlen, self._queue, l)
 
-    def _set_flag(self, flag, value):
+    def _set_flag(self, flag: int, value: bool) -> None:
         if value:
             self._flags |= flag
             self._conn._call(lib.set_flags, self._queue, flag, flag)
@@ -412,11 +418,11 @@ class Queue(object):
             self._flags &= ~flag
             self._conn._call(lib.set_flags, self._queue, flag, flag)
 
-    def _get_flag(self, flag):
+    def _get_flag(self, flag: int) -> bool:
         return bool(self._flags & flag)
 
     @property
-    def fail_open(self):
+    def fail_open(self) -> bool:
         """If True, packets are are accepted on queue overflow instead
         of dropped
 
@@ -424,51 +430,51 @@ class Queue(object):
         return self._get_flag(lib.NFQA_CFG_F_FAIL_OPEN)
 
     @fail_open.setter
-    def fail_open(self, value):
+    def fail_open(self, value: bool) -> None:
         self._set_flag(lib.NFQA_CFG_F_FAIL_OPEN, value)
 
     @property
-    def conntrack(self):
+    def conntrack(self) -> bool:
         """If True packets also contain conntrack information
 
         Defaults to false."""
         return self._get_flag(lib.NFQA_CFG_F_CONNTRACK)
 
     @conntrack.setter
-    def conntrack(self, value):
+    def conntrack(self, value: bool) -> None:
         self._set_flag(lib.NFQA_CFG_F_CONNTRACK, value)
 
     @property
-    def gso(self):
+    def gso(self) -> bool:
         """If True, packets are not reassembled in the kernel
 
         Defaults to false."""
         return self._get_flag(lib.NFQA_CFG_F_GSO)
 
     @gso.setter
-    def gso(self, value):
+    def gso(self, value: bool) -> None:
         self._set_flag(lib.NFQA_CFG_F_GSO, value)
 
     @property
-    def uid_gid(self):
+    def uid_gid(self) -> bool:
         """If true packets contain uid and gid if available
 
         Defaults to false."""
         return self._get_flag(lib.NFQA_CFG_F_UID_GID)
 
     @uid_gid.setter
-    def uid_gid(self, value):
+    def uid_gid(self, value: bool) -> None:
         return self._set_flag(lib.NFQA_CFG_F_UID_GID, value)
 
     @property
-    def secctx(self):
+    def secctx(self) -> bool:
         """If true packets contain the security context if available
 
         Defaults to false."""
         return self._get_flag(lib.NFQA_CFG_F_SECCTX)
 
     @secctx.setter
-    def secctx(self, value):
+    def secctx(self, value: bool) -> None:
         self._set_flag(lib.NFQA_CFG_F_SECCTX, value)
 
 
@@ -482,20 +488,20 @@ class Connection(object):
     maximum of chunk_size messages is received from the kernel at once."""
 
     def __init__(
-        self, alloc_size=50, chunk_size=10, packet_size=20 * 4096
-    ):  # just a guess for now
+        self, alloc_size: int = 50, chunk_size: int = 10, packet_size: int = 20 * 4096
+    ) -> None:  # just a guess for now
         self.alloc_size = alloc_size
         self.chunk_size = chunk_size
         self.packet_size = packet_size
-        self.queue = {}
-        self._conn = ffi.new("struct nfq_connection *")
+        self.queue: dict[int, Queue] = {}
+        self._conn = typing.cast(lib.nfq_connection, ffi.new("struct nfq_connection *"))
         if lib.init_connection(self._conn) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         flags = fcntl.fcntl(self._conn.fd, fcntl.F_GETFL, 0)
         fcntl.fcntl(self._conn.fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
         self._r, self._w = os.pipe()
-        self._buffers = collections.deque()
-        self._packets = collections.deque()
+        self._buffers: collections.deque[lib.CData] = collections.deque()
+        self._packets: collections.deque[lib.nfq_packet] = collections.deque()
         self._packet_lock = threading.Lock()
         self._received = _PacketErrorQueue()
         self._worker = threading.Thread(target=self._reader)
@@ -503,9 +509,11 @@ class Connection(object):
         self._worker.start()
         self._seq = itertools.count(1)
 
-    def _reader(self):
+    def _reader(self) -> None:
         chunk_size = self.chunk_size
-        packets = ffi.new("struct nfq_packet*[]", chunk_size)
+        packets = typing.cast(
+            typing.List[lib.nfq_packet], ffi.new("struct nfq_packet*[]", chunk_size)
+        )
         while self._conn is not None:
             with self._packet_lock:
                 if len(self._packets) < chunk_size:
@@ -532,20 +540,20 @@ class Connection(object):
         os.close(self._r)
         self._received.stop()
 
-    def _alloc_buffers(self):
+    def _alloc_buffers(self) -> None:
         for _ in range(self.alloc_size):
-            packet = ffi.new("struct nfq_packet *")
+            packet: lib.nfq_packet = ffi.new("struct nfq_packet *")  # type: ignore
             b = ffi.new("char []", self.packet_size)
             self._buffers.append(b)
             packet.buffer = b
             packet.len = self.packet_size
             self._packets.append(packet)
 
-    def _recycle(self, packet):
+    def _recycle(self, packet: lib.nfq_packet) -> None:
         with self._packet_lock:
             self._packets.append(packet)
 
-    def __iter__(self):
+    def __iter__(self) -> typing.Generator[Packet, None, None]:
         """Return an iterator with packets received from fnfqueue."""
         while True:
             p = self._received.get_packet()
@@ -560,7 +568,7 @@ class Connection(object):
             else:
                 yield Packet(self, p)
 
-    def _call(self, fun, *args):
+    def _call(self, fun: typing.Callable[..., int], *args: typing.Any) -> None:
         seq = next(self._seq)
         args += (1, seq)
         if fun(self._conn, *args) == -1:
@@ -575,19 +583,19 @@ class Connection(object):
             raise Exception("Something went really wrong!")
         raise OSError(err, os.strerror(err))
 
-    def bind(self, queue):
+    def bind(self, queue: int) -> Queue:
         """Bind to the the fnfqueue id queue."""
         self._call(lib.bind_queue, queue)
         self.queue[queue] = Queue(self, queue)
         return self.queue[queue]
 
-    def reset(self):
+    def reset(self) -> None:
         """Clear overflow exception."""
         self._received.clear()
 
     # change rcvbuffer
 
-    def close(self):
+    def close(self) -> None:
         """Close the connection. This can also be called while packets are read,
         which will cause the loop to terminate."""
         if self._conn is not None:
