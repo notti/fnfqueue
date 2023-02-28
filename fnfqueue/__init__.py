@@ -119,9 +119,9 @@ class Packet(object):
 
     The packet can be mangled or a verdict be set."""
 
-    def __init__(self, conn: "Connection", packet: lib.nfq_packet) -> None:
+    def __init__(self, conn: "Connection", packet: "lib.nfq_packet") -> None:
         self.cache: dict[str, typing.Any] = {}
-        self.packet: lib.nfq_packet = packet
+        self.packet: "lib.nfq_packet" = packet
         self._conn: Connection = conn
         self._mangle: int = 0
         self._invalid: bool = False
@@ -300,7 +300,7 @@ class Packet(object):
         Raises NoSuchAttributeException if packet does not contain an arrival time."""
 
         def toTime():
-            t: lib.nfqnl_msg_packet_timestamp = ffi.cast(
+            t: "lib.nfqnl_msg_packet_timestamp" = ffi.cast(
                 "struct nfqnl_msg_packet_timestamp *",
                 self.packet.attr[lib.NFQA_TIMESTAMP].buffer,
             )  # type: ignore
@@ -327,13 +327,13 @@ class Packet(object):
 
 class _PacketErrorQueue(object):
     def __init__(self) -> None:
-        self._packet_queue: collections.deque[lib.nfq_packet] = collections.deque()
+        self._packet_queue: collections.deque["lib.nfq_packet"] = collections.deque()
         self._packet_cond = threading.Condition()
-        self._error_queue: typing.Dict[int, lib.nfq_packet] = {}
+        self._error_queue: typing.Dict[int, "lib.nfq_packet"] = {}
         self._error_cond = threading.Condition()
         self._exception: Exception | None = None
 
-    def append(self, packets: typing.List[lib.nfq_packet]) -> None:
+    def append(self, packets: typing.List["lib.nfq_packet"]) -> None:
         with self._packet_cond:
             self._packet_queue.extend((p for p in packets if p.seq == 0))
             if len(self._packet_queue):
@@ -349,7 +349,7 @@ class _PacketErrorQueue(object):
             self._error_cond.notify_all()
             self._packet_cond.notify_all()
 
-    def get_packet(self) -> lib.nfq_packet | Exception:
+    def get_packet(self) -> "lib.nfq_packet | Exception":
         with self._packet_cond:
             while not len(self._packet_queue) and self._exception is None:
                 self._packet_cond.wait()
@@ -357,7 +357,7 @@ class _PacketErrorQueue(object):
                 return self._packet_queue.popleft()
             return self._exception
 
-    def get_error(self, seq: int) -> lib.nfq_packet | Exception:
+    def get_error(self, seq: int) -> "lib.nfq_packet | Exception":
         with self._error_cond:
             while seq not in self._error_queue and self._exception is None:
                 self._error_cond.wait()
@@ -494,14 +494,16 @@ class Connection(object):
         self.chunk_size = chunk_size
         self.packet_size = packet_size
         self.queue: dict[int, Queue] = {}
-        self._conn = typing.cast(lib.nfq_connection, ffi.new("struct nfq_connection *"))
+        self._conn = typing.cast(
+            "lib.nfq_connection", ffi.new("struct nfq_connection *")
+        )
         if lib.init_connection(self._conn) == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
         flags = fcntl.fcntl(self._conn.fd, fcntl.F_GETFL, 0)
         fcntl.fcntl(self._conn.fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
         self._r, self._w = os.pipe()
         self._buffers: collections.deque[lib.CData] = collections.deque()
-        self._packets: collections.deque[lib.nfq_packet] = collections.deque()
+        self._packets: collections.deque["lib.nfq_packet"] = collections.deque()
         self._packet_lock = threading.Lock()
         self._received = _PacketErrorQueue()
         self._worker = threading.Thread(target=self._reader)
@@ -512,7 +514,7 @@ class Connection(object):
     def _reader(self) -> None:
         chunk_size = self.chunk_size
         packets = typing.cast(
-            typing.List[lib.nfq_packet], ffi.new("struct nfq_packet*[]", chunk_size)
+            typing.List["lib.nfq_packet"], ffi.new("struct nfq_packet*[]", chunk_size)
         )
         while self._conn is not None:
             with self._packet_lock:
@@ -542,14 +544,14 @@ class Connection(object):
 
     def _alloc_buffers(self) -> None:
         for _ in range(self.alloc_size):
-            packet: lib.nfq_packet = ffi.new("struct nfq_packet *")  # type: ignore
+            packet: "lib.nfq_packet" = ffi.new("struct nfq_packet *")  # type: ignore
             b = ffi.new("char []", self.packet_size)
             self._buffers.append(b)
             packet.buffer = b
             packet.len = self.packet_size
             self._packets.append(packet)
 
-    def _recycle(self, packet: lib.nfq_packet) -> None:
+    def _recycle(self, packet: "lib.nfq_packet") -> None:
         with self._packet_lock:
             self._packets.append(packet)
 
