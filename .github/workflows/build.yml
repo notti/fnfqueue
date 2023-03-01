@@ -46,6 +46,7 @@ jobs:
     needs: build
     steps:
     - uses: actions/download-artifact@v3
-      path: dist
+      with:
+        path: dist
     - run: ls -R
       working-directory: dist
