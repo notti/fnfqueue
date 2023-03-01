@@ -537,7 +537,7 @@ class Connection(object):
                     self._received.exception(OSError(ffi.errno, os.strerror(ffi.errno)))
                     return
             with self._packet_lock:
-                self._received.append([self._packets.popleft() for i in range(num)])
+                self._received.append([self._packets.popleft() for _ in range(num)])
         # shutdown
         os.close(self._r)
         self._received.stop()
