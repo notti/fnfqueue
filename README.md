@@ -1,11 +1,12 @@
 fnfqueue
 ========
 
-[![Build Status](https://travis-ci.org/notti/fnfqueue.svg?branch=master)](https://travis-ci.org/notti/fnfqueue)
+[![Build Status](https://github.com/notti/fnfqueue/actions/workflows/main.yml/badge.svg)](https://github.com/notti/fnfqueue/actions)
 [![Python Versions](https://img.shields.io/pypi/pyversions/fnfqueue.svg)](https://pypi.org/project/fnfqueue/)
 [![PyPI - License](https://img.shields.io/pypi/l/fnfqueue.svg)](https://pypi.org/project/fnfqueue/)
 
 Fast netfilter nfqueue python and C interface. Gets the speed from
+
 - avoiding memory allocation
 - batching reads (uses `recv_mmsg`)
 
@@ -16,6 +17,7 @@ It can handle `ping -f` (even `iperf` if the moon is in the right spot) to local
 Focus is on a python like interface.
 
 Short example for mangling packets:
+
 ```bash
 iptables -A OUTPUT <filter here> -j NFQUEUE --queue-num 1
 ```
