@@ -168,6 +168,7 @@ class Packet(object):
             m = ffi.new("uint32_t *", socket.htonl(self.cache["mark"]))
             self.packet.attr[lib.NFQA_MARK].buffer = m
             self.packet.attr[lib.NFQA_MARK].len = ffi.sizeof("uint32_t")
+        ret = 0
         if self._conn._conn is not None:
             ret = lib.set_verdict(self._conn._conn, self.packet, action, mangle, 0, 0)
         self._conn._recycle(self.packet)
