@@ -33,7 +33,7 @@ jobs:
         sudo `which python` ping_test.py
         sudo `which python` flood_test.py short
         sudo `which python` close_test.py short
-  build:
+  deploy:
     runs-on: ubuntu-latest
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
