@@ -22,14 +22,9 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
-      run: python -m pip install --upgrade pip build dpkt
-    - name: Build binary package
-      run: python -m build -w
-    - name: Build source package
-      run: python -m build -s
-      if: matrix.python-version == '3.11'
+      run: python -m pip install --upgrade pip dpkt
     - name: Install package
-      run: python -m pip install dist/fnfqueue*whl
+      run: python -m pip install .
     - name: setup nfqueue
       run: sudo iptables -A INPUT -j NFQUEUE -i lo --dst 127.0.0.2 --queue-num 1
     - name: run tests
@@ -38,24 +33,28 @@ jobs:
         sudo `which python` ping_test.py
         sudo `which python` flood_test.py short
         sudo `which python` close_test.py short
-    - name: store built packages
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.python-version }}
-        path: dist/*
-  publish:
+  build:
     runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
     needs: build
     if: startsWith(github.ref, 'refs/tags')
     steps:
-    - uses: actions/download-artifact@v3
-      with:
-        path: dist
-    - name: move files into place
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: build wheels
       run: |
-        mv */* .
-        rmdir * || true
-      working-directory: dist
+        for BIN in /opt/python/*/bin; do
+          "${BIN}/pip" wheel . --no-deps -w dist/
+        done
+    - name: fixup tags
+      run: |
+        for WHL in dist/*whl; do
+          auditwheel repair -w dist/ "${WHL}"
+          rm "${WHL}"
+        done
+    - name: build source release
+      run: $(ls -1d /opt/python/cp* | sort -t'p' -r -n -k4 | head -n1)/bin/python -m build -s
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
