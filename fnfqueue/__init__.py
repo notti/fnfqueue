@@ -141,6 +141,15 @@ class Packet(object):
         After calling this function, using this instance is results
         in PacketInvalidException."""
         self.verdict(ACCEPT, mangle)
+     
+    def accept_batch(self, mangle: int = 0) -> None:
+        """Accept the packet and optionally mangle the given attributes.
+
+        mangle can be a combination (or) of MANGLE_MARK and MANGLE_PAYLOAD.
+
+        After calling this function, using this instance is results
+        in PacketInvalidException."""
+        self.verdict(ACCEPT, mangle)
 
     def drop(self) -> None:
         """Drop the packet.
@@ -175,6 +184,34 @@ class Packet(object):
         self._invalidate()
         if ret == -1:
             raise OSError(ffi.errno, os.strerror(ffi.errno))
+
+     def verdict_batch(self, action: int, mangle: int = 0) -> None:
+        """Set the verdict action on the packet and optionally mangle the
+        given attribute(s).
+
+        action can be either DROP, ACCEPT, REPEAT, or STOP.
+
+        mangle can be a combination (or) of MANGLE_MARK and MANGLE_PAYLOAD.
+
+        After calling this function, using this instance is results
+        in PacketInvalidException."""
+        self._is_invalid()
+        if mangle & lib.MANGLE_PAYLOAD:
+            p = ffi.new("char []", self.cache["payload"])
+            self.packet.attr[lib.NFQA_PAYLOAD].buffer = p
+            self.packet.attr[lib.NFQA_PAYLOAD].len = len(self.cache["payload"])
+        if mangle & lib.MANGLE_MARK:
+            m = ffi.new("uint32_t *", socket.htonl(self.cache["mark"]))
+            self.packet.attr[lib.NFQA_MARK].buffer = m
+            self.packet.attr[lib.NFQA_MARK].len = ffi.sizeof("uint32_t")
+        ret = 0
+        if self._conn._conn is not None:
+            ret = lib.set_verdict_batch(self._conn._conn, self.packet, action, mangle, 0, 0)
+        self._conn._recycle(self.packet)
+        self._invalidate()
+        if ret == -1:
+            raise OSError(ffi.errno, os.strerror(ffi.errno))
+
 
     def _invalidate(self) -> None:
         del self.cache
